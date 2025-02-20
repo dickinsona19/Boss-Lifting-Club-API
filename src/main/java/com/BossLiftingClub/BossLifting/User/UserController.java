@@ -52,5 +52,12 @@ public class UserController {
                 })
                 .orElse(ResponseEntity.notFound().build());
     }
+
+    @GetMapping("barcode/{barcode}")
+    public ResponseEntity<User> getByBarcode(@PathVariable String barcode) {
+        return userService.getUserByBarcodeToken(barcode)
+                .map(ResponseEntity::ok)
+                   .orElseGet(() -> ResponseEntity.notFound().build());
+    }
 }
 

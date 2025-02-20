@@ -29,18 +29,22 @@ public class User {
     @Column(name = "created_at", nullable = false)
     private LocalDateTime createdAt = LocalDateTime.now();
 
+    @Column(name ="entry_barcode_token", nullable = false)
+    private String entryBarcodeToken;
+
     // Default constructor is required by JPA
     public User() {
     }
 
     // Constructor with fields (except id, which is auto-generated)
-    public User(String firstName, String lastName, String password, String phoneNumber, Boolean isInGoodStanding) {
+    public User(String firstName, String lastName, String password, String phoneNumber, Boolean isInGoodStanding, String entryBarcodeToken) {
         this.firstName = firstName;
         this.lastName = lastName;
         this.password = password;
         this.phoneNumber = phoneNumber;
         this.isInGoodStanding = isInGoodStanding;
         this.createdAt = LocalDateTime.now();
+        this.entryBarcodeToken = entryBarcodeToken;
     }
 
     // Getters and setters
@@ -91,5 +95,13 @@ public class User {
     }
     public void setCreatedAt(LocalDateTime createdAt) {
         this.createdAt = createdAt;
+    }
+
+    public String getEntryBarcodeToken() {
+        return entryBarcodeToken;
+    }
+
+    public void setEntryBarcodeToken(String entryBarcodeToken) {
+        this.entryBarcodeToken = entryBarcodeToken;
     }
 }

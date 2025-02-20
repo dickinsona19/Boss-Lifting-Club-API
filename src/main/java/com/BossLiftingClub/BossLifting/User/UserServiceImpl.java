@@ -36,4 +36,9 @@ public class UserServiceImpl implements UserService {
     public void deleteById(Long id) {
         userRepository.deleteById(id);
     }
+
+    @Override
+    public Optional<User> getUserByBarcodeToken(String barcodeToken){
+       return userRepository.findByEntryBarcodeToken(barcodeToken);
+    }
 }
