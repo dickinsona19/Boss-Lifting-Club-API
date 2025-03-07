@@ -1,0 +1,11 @@
+package com.BossLiftingClub.BossLifting.User.UserTitles;
+
+import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.stereotype.Repository;
+
+import java.util.Optional;
+
+@Repository
+public interface UserTitlesRepository extends JpaRepository<UserTitles, Long> {
+    Optional<UserTitles> findByTitle(String title);
+}

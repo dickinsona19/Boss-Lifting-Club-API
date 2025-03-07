@@ -1,4 +1,6 @@
 package com.BossLiftingClub.BossLifting.User;
+
+import com.BossLiftingClub.BossLifting.User.UserTitles.UserTitles;
 import jakarta.persistence.*;
 
 import java.time.LocalDateTime;
@@ -8,7 +10,7 @@ import java.time.LocalDateTime;
 public class User {
 
     @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY) // H2 supports IDENTITY; PostgreSQL uses SERIAL.
+    @GeneratedValue(strategy = GenerationType.IDENTITY) // Works with AUTO_INCREMENT in MySQL/PostgreSQL
     private Long id;
 
     @Column(name = "first_name", nullable = false)
@@ -17,7 +19,7 @@ public class User {
     @Column(name = "last_name", nullable = false)
     private String lastName;
 
-    @Column(nullable = false)
+    @Column(name = "password", nullable = false)
     private String password;
 
     @Column(name = "phone_number", unique = true, nullable = false)
@@ -29,22 +31,33 @@ public class User {
     @Column(name = "created_at", nullable = false)
     private LocalDateTime createdAt = LocalDateTime.now();
 
-    @Column(name ="entry_barcode_token", nullable = false)
-    private String entryBarcodeToken;
+    @Column(name = "entry_qrcode_token", nullable = false, unique = true)
+    private String entryQrcodeToken;
 
-    // Default constructor is required by JPA
+    @Column(name = "user_stripe_member_id", unique = true)
+    private String userStripeMemberId;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "user_title_id") // Foreign key referencing user_titles(id)
+    private UserTitles userTitles;
+
+    // Default constructor required by JPA
     public User() {
     }
 
-    // Constructor with fields (except id, which is auto-generated)
-    public User(String firstName, String lastName, String password, String phoneNumber, Boolean isInGoodStanding, String entryBarcodeToken) {
+    // Constructor with fields (excluding id, which is auto-generated)
+    public User(String firstName, String lastName, String password, String phoneNumber,
+                Boolean isInGoodStanding, String entryQrcodeToken, String userStripeMemberId,
+                UserTitles userTitles) {
         this.firstName = firstName;
         this.lastName = lastName;
         this.password = password;
         this.phoneNumber = phoneNumber;
         this.isInGoodStanding = isInGoodStanding;
         this.createdAt = LocalDateTime.now();
-        this.entryBarcodeToken = entryBarcodeToken;
+        this.entryQrcodeToken = entryQrcodeToken;
+        this.userStripeMemberId = userStripeMemberId;
+        this.userTitles = userTitles;
     }
 
     // Getters and setters
@@ -52,8 +65,7 @@ public class User {
     public Long getId() {
         return id;
     }
-
-    // No setter for id since it is auto-generated
+    // No setter for id since it’s auto-generated
 
     public String getFirstName() {
         return firstName;
@@ -87,7 +99,7 @@ public class User {
         return isInGoodStanding;
     }
     public void setIsInGoodStanding(Boolean inGoodStanding) {
-        isInGoodStanding = inGoodStanding;
+        this.isInGoodStanding = inGoodStanding;
     }
 
     public LocalDateTime getCreatedAt() {
@@ -97,11 +109,20 @@ public class User {
         this.createdAt = createdAt;
     }
 
-    public String getEntryBarcodeToken() {
-        return entryBarcodeToken;
+    public String getEntryQrcodeToken() { return entryQrcodeToken; }
+    public void setEntryQrcodeToken(String entryQrcodeToken) { this.entryQrcodeToken = entryQrcodeToken; }
+
+    public String getUserStripeMemberId() {
+        return userStripeMemberId;
+    }
+    public void setUserStripeMemberId(String userStripeMemberId) {
+        this.userStripeMemberId = userStripeMemberId;
     }
 
-    public void setEntryBarcodeToken(String entryBarcodeToken) {
-        this.entryBarcodeToken = entryBarcodeToken;
+    public UserTitles getUserTitles() {
+        return userTitles;
+    }
+    public void setUserTitles(UserTitles userTitles) {
+        this.userTitles = userTitles;
     }
 }

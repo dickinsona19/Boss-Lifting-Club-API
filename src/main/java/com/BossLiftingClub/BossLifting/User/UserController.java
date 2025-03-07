@@ -1,20 +1,27 @@
 package com.BossLiftingClub.BossLifting.User;
 
+import com.stripe.model.Customer;
+import com.stripe.model.billingportal.Session;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 @RestController
 @RequestMapping("/users")
 public class UserController {
-
+    private final BarcodeService barcodeService;
     private final UserService userService;
 
     @Autowired
-    public UserController(UserService userService) {
+    public UserController(UserService userService, BarcodeService barcodeService) {
         this.userService = userService;
+        this.barcodeService = barcodeService;
     }
 
     // Get all users
@@ -33,7 +40,7 @@ public class UserController {
 
     // Create a new user
     @PostMapping
-    public User createUser(@RequestBody User user) {
+    public User createUser(@RequestBody User user) throws Exception {
         return userService.save(user);
     }
 
@@ -48,7 +55,11 @@ public class UserController {
                     user.setPhoneNumber(userDetails.getPhoneNumber());
                     user.setIsInGoodStanding(userDetails.getIsInGoodStanding());
                     // createdAt usually remains unchanged
-                    return ResponseEntity.ok(userService.save(user));
+                    try {
+                        return ResponseEntity.ok(userService.save(user));
+                    } catch (Exception e) {
+                        throw new RuntimeException(e);
+                    }
                 })
                 .orElse(ResponseEntity.notFound().build());
     }
@@ -59,5 +70,65 @@ public class UserController {
                 .map(ResponseEntity::ok)
                    .orElseGet(() -> ResponseEntity.notFound().build());
     }
+
+
+    @GetMapping(value = "/barcode/image/{token}", produces = MediaType.IMAGE_PNG_VALUE)
+    public ResponseEntity<byte[]> getBarcodeImage(@PathVariable String token) {
+        try {
+            byte[] image = barcodeService.generateBarcode(token, 300, 300);
+            return ResponseEntity.ok().contentType(MediaType.IMAGE_PNG).body(image);
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
+        }
+    }
+    @PostMapping("/fullSetupUser")
+    public ResponseEntity<Map<String, String>> createUserAndCheckout(@RequestBody UserRequest userRequest) {
+        try {
+            // 1. Create a Stripe customer
+            Map<String, Object> customerParams = new HashMap<>();
+            customerParams.put("name", userRequest.getFirstName() + " " + userRequest.getLastName());
+            customerParams.put("phone", userRequest.getPhoneNumber());
+            Customer customer = Customer.create(customerParams);
+
+            // 2. Create a Checkout session for activation fee and payment method setup
+            Map<String, Object> sessionParams = new HashMap<>();
+            sessionParams.put("customer", customer.getId());
+            sessionParams.put("mode", "payment"); // For one-time charge
+            sessionParams.put("payment_method_types", java.util.Arrays.asList("card"));
+            sessionParams.put("success_url", "http://localhost:5173/success");
+            sessionParams.put("cancel_url", "http://localhost:5173/cancel");
+
+            // Add a one-time activation fee (e.g., $10)
+            Map<String, Object> priceData = new HashMap<>();
+            priceData.put("currency", "usd");
+            priceData.put("unit_amount", 1000); // $10.00 in cents
+            priceData.put("product_data", new HashMap<String, Object>() {{
+                put("name", "Activation Fee");
+            }});
+
+            Map<String, Object> lineItem = new HashMap<>();
+            lineItem.put("price_data", priceData);
+            lineItem.put("quantity", 1);
+
+            sessionParams.put("line_items", java.util.Arrays.asList(lineItem));
+
+            // Save payment method for future use
+            sessionParams.put("payment_intent_data", new HashMap<String, Object>() {{
+                put("setup_future_usage", "off_session"); // Saves payment method
+            }});
+
+            Session session = Session.create(sessionParams); // Now using com.stripe.model.checkout.Session
+
+            // 3. Return session ID to frontend
+            Map<String, String> response = new HashMap<>();
+            response.put("sessionId", session.getId());
+            return ResponseEntity.ok(response);
+
+        } catch (Exception e) {
+            e.printStackTrace();
+            return ResponseEntity.status(500).body(Map.of("error", "Failed to create checkout session: " + e.getMessage()));
+        }
+    }
+
 }
 

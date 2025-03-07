@@ -7,5 +7,7 @@ import java.util.Optional;
 
 @Repository
 public interface UserRepository extends JpaRepository<User, Long> {
-    Optional<User> findByEntryBarcodeToken(String barcodeToken);
+    Optional<User> findByEntryQrcodeToken(String token);
+    Optional<User> findByPhoneNumber(String phoneNumber);
+    Optional<User> findByUserStripeMemberId(String stripeCustomerId);
 }
