@@ -1,5 +1,6 @@
 package com.BossLiftingClub.BossLifting;
 
+import com.BossLiftingClub.BossLifting.User.User;
 import com.BossLiftingClub.BossLifting.User.UserRepository;
 import com.BossLiftingClub.BossLifting.User.UserTitles.UserTitles;
 import com.BossLiftingClub.BossLifting.User.UserTitles.UserTitlesRepository;
@@ -19,6 +20,14 @@ public class DataInitializer {
                 System.out.println("Inserted default user titles");
             }
 
+            // Insert sample users
+            if (userRepository.count() == 0) {
+                UserTitles founding = userTitleRepository.findByTitle("Founding User").get();
+                UserTitles newUser = userTitleRepository.findByTitle("New User").get();
+                userRepository.save(new User("Alice", "Smith", "AlicePass321", "9876543210", "12345", founding));
+                userRepository.save(new User("Bob", "Brown", "BobSecure456", "4567891230", "11111", newUser));
+                System.out.println("Inserted sample users");
+            }
         };
     }
 }
