@@ -37,8 +37,8 @@ public class User {
     @Column(name = "user_stripe_member_id", unique = true)
     private String userStripeMemberId;
 
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "user_title_id") // Foreign key referencing user_titles(id)
+    @ManyToOne(fetch = FetchType.EAGER) // Default, but explicit here
+    @JoinColumn(name = "user_title_id", referencedColumnName = "id")
     private UserTitles userTitles;
 
     // Default constructor required by JPA
