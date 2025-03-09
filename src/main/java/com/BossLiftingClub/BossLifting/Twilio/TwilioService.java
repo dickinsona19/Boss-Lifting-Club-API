@@ -8,17 +8,23 @@ import org.springframework.stereotype.Service;
 
 @Service
 public class TwilioService {
-    private final String accountSid = "ACb69150bf238f0f5e77ef79180ab9fdb4";
-    private final String authToken = "3ecda1cc42fcad95e953d7a2a2130dd1";
-    private final String verifyServiceSid = "VAc16b5fe052191f462c02e712ec3bfea0";
+    private final String ACCOUNT_SID;
+    private final String AUTH_TOKEN;
+    private final String VERIFY_SERVICE_SID;
 
-    public TwilioService() {
-        Twilio.init(accountSid, authToken);
+    public TwilioService(
+            @Value("${TWILIO_ACCOUNT_SID}") String accountSid,
+            @Value("${TWILIO_AUTH_TOKEN}") String authToken,
+            @Value("${TWILIO_VERIFY_SERVICE_SID}") String verifyServiceSid) {
+        this.ACCOUNT_SID = accountSid;
+        this.AUTH_TOKEN = authToken;
+        this.VERIFY_SERVICE_SID = verifyServiceSid;
+        Twilio.init(ACCOUNT_SID, AUTH_TOKEN); // Initialize Twilio client
     }
 
     public String sendOTP(String phoneNumber) {
         Verification verification = Verification.creator(
-                verifyServiceSid,
+                VERIFY_SERVICE_SID,
                 phoneNumber,
                 "sms"
         ).create();
@@ -26,7 +32,7 @@ public class TwilioService {
     }
 
     public boolean verifyOTP(String phoneNumber, String otp) {
-        VerificationCheck verificationCheck = VerificationCheck.creator(verifyServiceSid)
+        VerificationCheck verificationCheck = VerificationCheck.creator(VERIFY_SERVICE_SID)
                 .setCode(otp)
                 .setTo(phoneNumber)
                 .create();
