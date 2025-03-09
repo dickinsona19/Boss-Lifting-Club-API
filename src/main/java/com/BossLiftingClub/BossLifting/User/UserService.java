@@ -12,4 +12,5 @@ public interface UserService {
     User updateUserAfterPayment(String stripeCustomerId);
     User updateUserPaymentFailed(String stripeCustomerId);
     Optional<User> getUserByPhoneNumber(String phoneNumber);
+    Optional<User> deleteUserWithPhoneNumber(String PhoneNumber);
 }

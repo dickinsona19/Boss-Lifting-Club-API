@@ -11,6 +11,7 @@ import org.springframework.web.bind.annotation.*;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 @RestController
 @RequestMapping("/users")
@@ -29,7 +30,22 @@ public class UserController {
     public List<User> getAllUsers() {
         return userService.findAll();
     }
+    //Delete User given Phone Number
+    @DeleteMapping("/delete-user")
+    public ResponseEntity<Map<String, Object>> deleteUser(@RequestBody Map<String, String> request) {
+        String phoneNumber = request.get("phoneNumber");
+        Optional<User> deletedUser = userService.deleteUserWithPhoneNumber(phoneNumber);
 
+        Map<String, Object> response = new HashMap<>();
+        if (deletedUser.isPresent()) {
+            response.put("message", "User deleted successfully");
+            response.put("deletedUser", deletedUser.get());
+            return ResponseEntity.ok(response);
+        } else {
+            response.put("error", "User with phone number " + phoneNumber + " not found");
+            return ResponseEntity.status(404).body(response);
+        }
+    }
     // Get a single user by id
     @GetMapping("/{id}")
     public ResponseEntity<User> getUserById(@PathVariable Long id) {

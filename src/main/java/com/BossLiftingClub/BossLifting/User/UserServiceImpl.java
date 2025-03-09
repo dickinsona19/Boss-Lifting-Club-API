@@ -49,6 +49,17 @@ public class UserServiceImpl implements UserService {
     public Optional<User> getUserByPhoneNumber(String phoneNumber) {
         return userRepository.findByPhoneNumber(phoneNumber);
     }
+
+    @Override
+    public Optional<User> deleteUserWithPhoneNumber(String phoneNumber) {
+        Optional<User> userOpt = userRepository.findByPhoneNumber(phoneNumber);
+        if (userOpt.isPresent()) {
+            userRepository.delete(userOpt.get());
+            return userOpt; // Return the deleted user
+        }
+        return Optional.empty(); // No user found
+    }
+
     @Override
     public User updateUserPaymentFailed(String stripeCustomerId) {
         Optional<User> optionalUser = userRepository.findByUserStripeMemberId(stripeCustomerId);
