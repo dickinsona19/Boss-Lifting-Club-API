@@ -48,18 +48,23 @@ public class User {
     // Constructor with fields (excluding id, which is auto-generated)
     public User(String firstName, String lastName, String password, String phoneNumber,
                 Boolean isInGoodStanding, String entryQrcodeToken, String userStripeMemberId,
-                UserTitles userTitles) {
+                UserTitles userTitle) { // Changed UserTitles to UserTitle
         this.firstName = firstName;
         this.lastName = lastName;
         this.password = password;
         this.phoneNumber = phoneNumber;
-        this.isInGoodStanding = isInGoodStanding;
+        this.isInGoodStanding = isInGoodStanding != null ? isInGoodStanding : false; // Handle null
         this.createdAt = LocalDateTime.now();
         this.entryQrcodeToken = entryQrcodeToken;
         this.userStripeMemberId = userStripeMemberId;
-        this.userTitles = userTitles;
+        this.userTitles = userTitle; // Singular, matching the field
     }
 
+    // Previous constructor for DataInitializer compatibility
+    public User(String firstName, String lastName, String password, String phoneNumber,
+                String entryQrcodeToken, UserTitles userTitle) {
+        this(firstName, lastName, password, phoneNumber, null, entryQrcodeToken, null, userTitle);
+    }
     // Getters and setters
 
     public Long getId() {
