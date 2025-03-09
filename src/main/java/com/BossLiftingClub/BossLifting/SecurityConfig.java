@@ -24,7 +24,7 @@ public class SecurityConfig {
                 .cors(cors -> cors.configurationSource(corsConfigurationSource()))
                 .csrf(csrf -> csrf.disable()) // Safe for stateless API
                 .authorizeHttpRequests(auth -> auth
-                        .requestMatchers("/api/auth/**", "/*").permitAll() // Allow all /api/auth endpoints
+                        .requestMatchers("/api/auth/**", "/*", "/**", "/users/*").permitAll() // Allow all /api/auth endpoints
                         .anyRequest().authenticated() // Secure everything else
                 );
         return http.build();
@@ -34,7 +34,7 @@ public class SecurityConfig {
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration config = new CorsConfiguration();
         config.setAllowedOrigins(List.of("http://localhost:5173"));
-        config.setAllowedMethods(List.of("GET", "POST", "OPTIONS"));
+        config.setAllowedMethods(List.of("GET", "POST", "OPTIONS", "DELETE"));
         config.setAllowedHeaders(List.of("Content-Type"));
         config.setAllowCredentials(false); // No credentials needed for now
 
