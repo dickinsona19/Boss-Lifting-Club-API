@@ -9,7 +9,7 @@ import org.springframework.stereotype.Service;
 @Service
 public class TwilioService {
     private final String accountSid = "ACb69150bf238f0f5e77ef79180ab9fdb4";
-    private final String authToken = "169925fbf66997f7245544a04908a0cb";
+    private final String authToken = "3ecda1cc42fcad95e953d7a2a2130dd1";
     private final String verifyServiceSid = "VAc16b5fe052191f462c02e712ec3bfea0";
 
     public TwilioService() {
