@@ -15,7 +15,7 @@ public class SecurityConfig {
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         http
                 .authorizeHttpRequests(auth -> auth
-                        .requestMatchers("/webhook", "/signupWithCard", "/users").permitAll()  // Add /users
+                        .requestMatchers("/*").permitAll()  // Add /users
                         .anyRequest().authenticated()  // All other endpoints require authentication
                 )
                 .csrf(csrf -> csrf.disable());  // Disable CSRF for APIs
