@@ -15,15 +15,17 @@ import org.springframework.web.filter.CorsFilter;
 import java.util.List;
 
 @Configuration
+@EnableWebSecurity // Optional, enables security customization
 public class SecurityConfig {
+
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         http
-                .cors(cors -> cors.configurationSource(corsConfigurationSource())) // Updated CORS config
-                .csrf(csrf -> csrf.disable()) // Disable CSRF for simplicity
+                .cors(cors -> cors.configurationSource(corsConfigurationSource()))
+                .csrf(csrf -> csrf.disable()) // Safe for stateless API
                 .authorizeHttpRequests(auth -> auth
-                        .requestMatchers("/*").permitAll() // Public endpoints
-                        .anyRequest().authenticated()
+                        .requestMatchers("/api/auth/**", "/*").permitAll() // Allow all /api/auth endpoints
+                        .anyRequest().authenticated() // Secure everything else
                 );
         return http.build();
     }
@@ -34,7 +36,7 @@ public class SecurityConfig {
         config.setAllowedOrigins(List.of("http://localhost:5173"));
         config.setAllowedMethods(List.of("GET", "POST", "OPTIONS"));
         config.setAllowedHeaders(List.of("Content-Type"));
-        config.setAllowCredentials(false); // Set to true if needed
+        config.setAllowCredentials(false); // No credentials needed for now
 
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
         source.registerCorsConfiguration("/**", config);
@@ -45,11 +47,11 @@ public class SecurityConfig {
     public CorsFilter corsFilter() {
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
         CorsConfiguration config = new CorsConfiguration();
-        config.addAllowedOrigin("http://localhost:5173"); // Allow your dev frontend
-        config.addAllowedMethod("*"); // Allow all methods (GET, POST, OPTIONS, etc.)
-        config.addAllowedHeader("*"); // Allow all headers
-        config.setAllowCredentials(true); // Allow cookies/auth credentials if needed
-        source.registerCorsConfiguration("/**", config); // Apply to all endpoints
+        config.addAllowedOrigin("http://localhost:5173");
+        config.addAllowedMethod("*");
+        config.addAllowedHeader("*");
+        config.setAllowCredentials(true); // Keep if you plan to add auth later
+        source.registerCorsConfiguration("/**", config);
         return new CorsFilter(source);
     }
 
