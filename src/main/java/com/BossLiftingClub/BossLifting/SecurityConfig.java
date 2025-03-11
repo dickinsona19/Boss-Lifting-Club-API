@@ -33,7 +33,7 @@ public class SecurityConfig {
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration config = new CorsConfiguration();
-        config.setAllowedOrigins(List.of("http://localhost:5173", "https://boss-lifting-frontend.onrender.com"));
+        config.setAllowedOrigins(List.of("http://localhost:5173", "https://boss-lifting-club.onrender.com"));
         config.setAllowedMethods(List.of("GET", "POST", "OPTIONS", "DELETE"));
         config.setAllowedHeaders(List.of("Content-Type"));
         config.setAllowCredentials(false); // No credentials needed for now
