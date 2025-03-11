@@ -408,8 +408,8 @@ public class StripeController {
             // Step 5: Create Checkout session in setup mode with metadata
             String sessionId = stripeService.createSetupCheckoutSessionWithMetadata(
                     customerId,
-                    "http://localhost:5173/success",
-                    "http://localhost:5173/cancel",
+                    "https://boss-lifting-club.onrender.com/success",
+                    "https://boss-lifting-club.onrender.com/cancel",
                     metadata
             );
 
