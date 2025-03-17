@@ -36,7 +36,8 @@ public class SecurityConfig {
                 "http://localhost:5173",        // Vite/React default
                 "http://localhost:8081",        // Your current frontend
                 "https://boss-lifting-club.onrender.com", //Production 1
-                "www.cltliftingclub.com"// Production 2
+                "www.cltliftingclub.com",       // Production 2
+                "https://www.cltliftingclub.com" // Production 3
         ));
         config.setAllowedMethods(List.of("GET", "POST", "OPTIONS", "DELETE", "PUT")); // Include OPTIONS for preflight
         config.setAllowedHeaders(List.of("*")); // Allow all headers
