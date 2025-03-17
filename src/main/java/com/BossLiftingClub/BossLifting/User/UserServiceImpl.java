@@ -7,6 +7,7 @@ import org.springframework.stereotype.Service;
 
 import java.security.SecureRandom;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 @Service
@@ -24,7 +25,28 @@ public class UserServiceImpl implements UserService {
         this.passwordEncoder = passwordEncoder;
 
     }
+    @Override
+    public Optional<User> updateProfilePicture(Long id, byte[] profilePicture) {
+        return userRepository.findById(id)
+                .map(user -> {
+                    user.setProfilePicture(profilePicture);
+                    return userRepository.save(user); // Save without re-encoding password
+                });
+    }
+    @Override
+    public User signInWithPhoneNumber(String phoneNumber, String password) throws Exception {
+        // Find user by phone number
+        User user = userRepository.findByPhoneNumber(phoneNumber)
+                .orElseThrow(() -> new Exception("User with phone number " + phoneNumber + " not found"));
 
+        // Validate password
+        if (!passwordEncoder.matches(password, user.getPassword())) {
+            throw new Exception("Invalid password");
+        }
+
+        // Return user if credentials are valid
+        return user;
+    }
     @Override
     public List<User> findAll() {
         return userRepository.findAll();
@@ -104,5 +126,28 @@ public class UserServiceImpl implements UserService {
     @Override
     public Optional<User> getUserByBarcodeToken(String barcodeToken){
        return userRepository.findByEntryQrcodeToken(barcodeToken);
+    }
+    @Override
+    public User signIn(Map<String, String> requestBody) throws Exception {
+        String phoneNumber = requestBody.get("phoneNumber");
+        String password = requestBody.get("password");
+
+        // Basic validation
+        if (phoneNumber == null || password == null) {
+            throw new Exception("Phone number and password are required");
+        }
+
+        Optional<User> optionalUser = userRepository.findByPhoneNumber(phoneNumber);
+
+        if (optionalUser.isEmpty()) {
+            throw new Exception("Invalid phone number or password");
+        }
+
+        User user = optionalUser.get();
+        if (!passwordEncoder.matches(password, user.getPassword())) {
+            throw new Exception("Invalid phone number or password");
+        }
+
+        return user; // Return the user object on successful login
     }
 }

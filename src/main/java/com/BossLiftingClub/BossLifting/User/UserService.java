@@ -1,6 +1,7 @@
 package com.BossLiftingClub.BossLifting.User;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 public interface UserService {
@@ -13,4 +14,7 @@ public interface UserService {
     User updateUserPaymentFailed(String stripeCustomerId);
     Optional<User> getUserByPhoneNumber(String phoneNumber);
     Optional<User> deleteUserWithPhoneNumber(String PhoneNumber);
+    User signIn(Map<String, String> requestBody) throws Exception;
+    User signInWithPhoneNumber(String phoneNumber, String password) throws Exception;
+    Optional<User> updateProfilePicture(Long id, byte[] profilePicture);
 }

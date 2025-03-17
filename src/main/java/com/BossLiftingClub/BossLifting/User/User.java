@@ -41,6 +41,8 @@ public class User {
     @JoinColumn(name = "user_title_id", referencedColumnName = "id")
     private UserTitles userTitles;
 
+    @Lob // Large Object for binary data
+    private byte[] profilePicture;
     // Default constructor required by JPA
     public User() {
     }
@@ -125,4 +127,6 @@ public class User {
     public void setUserTitles(UserTitles userTitles) {
         this.userTitles = userTitles;
     }
+    public byte[] getProfilePicture() { return profilePicture; }
+    public void setProfilePicture(byte[] profilePicture) { this.profilePicture = profilePicture; }
 }

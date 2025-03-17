@@ -1,5 +1,6 @@
 package com.BossLiftingClub.BossLifting.User;
 
+import com.BossLiftingClub.BossLifting.User.PasswordAuth.JwtUtil;
 import com.stripe.model.Customer;
 import com.stripe.model.billingportal.Session;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -7,7 +8,9 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
 
+import java.io.IOException;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -24,6 +27,39 @@ public class UserController {
         this.userService = userService;
         this.barcodeService = barcodeService;
     }
+
+
+    @Autowired
+    private JwtUtil jwtUtil;
+
+    @PostMapping("/signin")
+    public ResponseEntity<Map<String, Object>> signIn(@RequestBody Map<String, String> requestBody) {
+        try {
+            String phoneNumber = requestBody.get("phoneNumber");
+            String password = requestBody.get("password");
+
+            if (phoneNumber == null || password == null) {
+                Map<String, Object> errorResponse = new HashMap<>();
+                errorResponse.put("error", "Missing phone number or password");
+                return ResponseEntity.status(400).body(errorResponse);
+            }
+
+            // Validate phone number and password with your service
+            User user = userService.signInWithPhoneNumber(phoneNumber, password);
+            String token = jwtUtil.generateToken(phoneNumber); // Use phoneNumber as the subject
+
+            Map<String, Object> response = new HashMap<>();
+            response.put("user", user);
+            response.put("token", token);
+            return ResponseEntity.ok(response);
+        } catch (Exception e) {
+            Map<String, Object> errorResponse = new HashMap<>();
+            errorResponse.put("error", e.getMessage());
+            return ResponseEntity.status(401).body(errorResponse);
+        }
+    }
+
+
 
     // Get all users
     @GetMapping
@@ -71,6 +107,20 @@ public class UserController {
                     user.setPhoneNumber(userDetails.getPhoneNumber());
                     user.setIsInGoodStanding(userDetails.getIsInGoodStanding());
                     // createdAt usually remains unchanged
+                    try {
+                        return ResponseEntity.ok(userService.save(user));
+                    } catch (Exception e) {
+                        throw new RuntimeException(e);
+                    }
+                })
+                .orElse(ResponseEntity.notFound().build());
+    }
+
+    @PutMapping("/password/{id}")
+    public ResponseEntity<User> updateUserPassword(@PathVariable Long id, @RequestBody User userDetails) {
+        return userService.findById(id)
+                .map(user -> {
+                    user.setPassword(userDetails.getPassword());
                     try {
                         return ResponseEntity.ok(userService.save(user));
                     } catch (Exception e) {
@@ -144,6 +194,15 @@ public class UserController {
             e.printStackTrace();
             return ResponseEntity.status(500).body(Map.of("error", "Failed to create checkout session: " + e.getMessage()));
         }
+    }
+
+    // Update user profile picture
+    @PutMapping("/{id}/picture")
+    public ResponseEntity<User> updateProfilePicture(@PathVariable Long id,
+                                                     @RequestParam("picture") MultipartFile picture) throws IOException {
+        return userService.updateProfilePicture(id, picture.getBytes())
+                .map(ResponseEntity::ok)
+                .orElse(ResponseEntity.notFound().build());
     }
 
 }
