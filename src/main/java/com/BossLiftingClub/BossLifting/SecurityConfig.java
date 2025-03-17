@@ -10,21 +10,20 @@ import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
-import org.springframework.web.filter.CorsFilter;
 
 import java.util.List;
 
 @Configuration
-@EnableWebSecurity // Optional, enables security customization
+@EnableWebSecurity
 public class SecurityConfig {
 
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         http
-                .cors(cors -> cors.configurationSource(corsConfigurationSource()))
-                .csrf(csrf -> csrf.disable()) // Safe for stateless API
+                .cors(cors -> cors.configurationSource(corsConfigurationSource())) // Enable CORS
+                .csrf(csrf -> csrf.disable()) // Disable CSRF for stateless API
                 .authorizeHttpRequests(auth -> auth
-                        .requestMatchers("/api/auth/**", "/*", "/**", "/users/*").permitAll() // Allow all /api/auth endpoints
+                        .requestMatchers("/api/auth/**", "/auth/**", "/users/**", "/users/password/**","/users/**/picture").permitAll() // Allow your endpoints
                         .anyRequest().authenticated() // Secure everything else
                 );
         return http.build();
@@ -33,26 +32,19 @@ public class SecurityConfig {
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration config = new CorsConfiguration();
-        config.setAllowedOrigins(List.of("http://localhost:5173", "https://boss-lifting-club.onrender.com"));
-        config.setAllowedMethods(List.of("GET", "POST", "OPTIONS", "DELETE"));
-        config.setAllowedHeaders(List.of("Content-Type"));
-        config.setAllowCredentials(false); // No credentials needed for now
+        config.setAllowedOrigins(List.of(
+                "http://localhost:5173",        // Vite/React default
+                "http://localhost:8081",        // Your current frontend
+                "https://boss-lifting-club.onrender.com", //Production 1
+                "www.cltliftingclub.com"// Production 2
+        ));
+        config.setAllowedMethods(List.of("GET", "POST", "OPTIONS", "DELETE", "PUT")); // Include OPTIONS for preflight
+        config.setAllowedHeaders(List.of("*")); // Allow all headers
+        config.setAllowCredentials(false); // No cookies/credentials needed yet
 
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
-        source.registerCorsConfiguration("/**", config);
+        source.registerCorsConfiguration("/**", config); // Apply to all paths
         return source;
-    }
-
-    @Bean
-    public CorsFilter corsFilter() {
-        UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
-        CorsConfiguration config = new CorsConfiguration();
-        config.addAllowedOrigin("http://localhost:5173");
-        config.addAllowedMethod("*");
-        config.addAllowedHeader("*");
-        config.setAllowCredentials(true); // Keep if you plan to add auth later
-        source.registerCorsConfiguration("/**", config);
-        return new CorsFilter(source);
     }
 
     @Bean
