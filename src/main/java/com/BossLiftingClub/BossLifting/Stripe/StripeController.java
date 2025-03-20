@@ -1,6 +1,8 @@
 package com.BossLiftingClub.BossLifting.Stripe;
 
 import com.BossLiftingClub.BossLifting.Stripe.RequestsAndResponses.*;
+import com.BossLiftingClub.BossLifting.User.Membership.Membership;
+import com.BossLiftingClub.BossLifting.User.Membership.MembershipRepository;
 import com.BossLiftingClub.BossLifting.User.User;
 import com.BossLiftingClub.BossLifting.User.UserRequest;
 import com.BossLiftingClub.BossLifting.User.UserService;
@@ -25,11 +27,13 @@ public class StripeController {
     private final String webhookSecret;
     private final UserService userService;
     private final UserTitlesRepository userTitlesRepository;
-    public StripeController(UserService userService, StripeService stripeService, @Value("${stripe.webhook.secret}") String webhookSecret, UserTitlesRepository userTitlesRepository) {
+    private final MembershipRepository membershipRepository;
+    public StripeController(UserService userService, StripeService stripeService, @Value("${stripe.webhook.secret}") String webhookSecret, UserTitlesRepository userTitlesRepository,MembershipRepository membershipRepository) {
         this.stripeService = stripeService;
         this.webhookSecret = webhookSecret;
         this.userService = userService;
         this.userTitlesRepository = userTitlesRepository;
+        this.membershipRepository = membershipRepository;
     }
 
     @GetMapping("/test-product")
@@ -327,6 +331,9 @@ public class StripeController {
                     user.setIsInGoodStanding(false); // Still false until payment succeeds later
                     UserTitles foundingUserTitle = userTitlesRepository.findByTitle(metadata.get("userTitle"))
                             .orElseThrow(() -> new RuntimeException("Founding user title not found in database"));
+                    Membership membership = membershipRepository.findByName(metadata.get("membership"))
+                            .orElseThrow(() -> new RuntimeException("Founding user title not found in database"));
+                    user.setMembership(membership);
                     user.setUserTitles(foundingUserTitle);
                     user.setUserStripeMemberId(customerId);
                     System.out.println(user);
@@ -390,6 +397,9 @@ public class StripeController {
             UserTitles foundingUserTitle = userTitlesRepository.findByTitle("Founding User")
                     .orElseThrow(() -> new RuntimeException("Founding user title not found in database"));
 
+            Membership membership = membershipRepository.findByName(userRequest.getMembershipName())
+                    .orElseThrow(() -> new RuntimeException("Membership not found in database"));
+
             // Step 3: Create Stripe customer (but don’t save user yet)
             String customerId = stripeService.createCustomer(
                     null, // Email optional
@@ -404,6 +414,7 @@ public class StripeController {
             metadata.put("phoneNumber", userRequest.getPhoneNumber());
             metadata.put("password", userRequest.getPassword()); // Consider hashing if sensitive
             metadata.put("userTitle", foundingUserTitle.getTitle()); // Store title name
+            metadata.put("membership", membership.getName());
 
             // Step 5: Create Checkout session in setup mode with metadata
             String sessionId = stripeService.createSetupCheckoutSessionWithMetadata(

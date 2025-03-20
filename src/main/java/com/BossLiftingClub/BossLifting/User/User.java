@@ -1,5 +1,6 @@
 package com.BossLiftingClub.BossLifting.User;
 
+import com.BossLiftingClub.BossLifting.User.Membership.Membership;
 import com.BossLiftingClub.BossLifting.User.UserTitles.UserTitles;
 import jakarta.persistence.*;
 
@@ -41,9 +42,22 @@ public class User {
     @JoinColumn(name = "user_title_id", referencedColumnName = "id")
     private UserTitles userTitles;
 
+    @Lob
+    @Column(name = "signature_data")
+    private byte[] signatureData;
+
+    @Column(name = "waiver_signed_date")
+    private LocalDateTime waiverSignedDate;
+
     @Lob // Large Object for binary data
     private byte[] profilePicture;
     // Default constructor required by JPA
+
+
+    @ManyToOne
+    @JoinColumn(name = "membership_id")
+    private Membership membership;
+
     public User() {
     }
 
@@ -129,4 +143,12 @@ public class User {
     }
     public byte[] getProfilePicture() { return profilePicture; }
     public void setProfilePicture(byte[] profilePicture) { this.profilePicture = profilePicture; }
+    public byte[] getSignatureData() { return signatureData; }
+    public void setSignatureData(byte[] signatureData) { this.signatureData = signatureData; }
+
+    public LocalDateTime getWaiverSignedDate() { return waiverSignedDate; }
+    public void setWaiverSignedDate(LocalDateTime waiverSignedDate) { this.waiverSignedDate = waiverSignedDate; }
+
+    public Membership getMembership() { return membership; }
+    public void setMembership(Membership membership) { this.membership = membership; }
 }
