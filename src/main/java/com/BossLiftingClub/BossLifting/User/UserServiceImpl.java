@@ -9,6 +9,7 @@ import java.security.SecureRandom;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Random;
 
 @Service
 public class UserServiceImpl implements UserService {
@@ -71,6 +72,10 @@ public class UserServiceImpl implements UserService {
     public Optional<User> getUserByPhoneNumber(String phoneNumber) {
         return userRepository.findByPhoneNumber(phoneNumber);
     }
+    @Override
+    public User getUserByReferralCode(String referralCode){
+        return userRepository.findByReferralCode(referralCode);
+    }
 
     @Override
     public Optional<User> deleteUserWithPhoneNumber(String phoneNumber) {
@@ -105,6 +110,7 @@ public class UserServiceImpl implements UserService {
             token = generateUniqueToken(10); // Regenerate if not unique
         }
         user.setEntryQrcodeToken(token);
+        user.setReferralCode(generateUniqueReferralCode());
 
         // Save user with token
         return userRepository.save(user);
@@ -116,6 +122,14 @@ public class UserServiceImpl implements UserService {
             sb.append(CHARACTERS.charAt(random.nextInt(CHARACTERS.length())));
         }
         return sb.toString();
+    }
+
+    private String generateUniqueReferralCode() {
+        String code;
+        do {
+            code = generateUniqueToken(10);
+        } while (userRepository.findByReferralCode(code) != null);
+        return code;
     }
 
     @Override

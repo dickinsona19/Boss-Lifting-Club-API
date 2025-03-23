@@ -6,6 +6,7 @@ public class UserRequest {
     private String phoneNumber;
     private String password;
     private String membershipName;
+    private Long   referralId;
 
     // Getters and setters
     public String getFirstName() { return firstName; }
@@ -22,5 +23,12 @@ public class UserRequest {
 
     public void setMembershipName(String membershipName) {
         this.membershipName = membershipName;
+    }
+    public Long getReferralId() {
+        return referralId;
+    }
+
+    public void setReferralId(Long referralId) {
+        this.referralId = referralId;
     }
 }

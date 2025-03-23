@@ -4,6 +4,7 @@ import com.BossLiftingClub.BossLifting.Stripe.RequestsAndResponses.*;
 import com.BossLiftingClub.BossLifting.User.Membership.Membership;
 import com.BossLiftingClub.BossLifting.User.Membership.MembershipRepository;
 import com.BossLiftingClub.BossLifting.User.User;
+import com.BossLiftingClub.BossLifting.User.UserRepository;
 import com.BossLiftingClub.BossLifting.User.UserRequest;
 import com.BossLiftingClub.BossLifting.User.UserService;
 import com.BossLiftingClub.BossLifting.User.UserTitles.UserTitles;
@@ -28,12 +29,14 @@ public class StripeController {
     private final UserService userService;
     private final UserTitlesRepository userTitlesRepository;
     private final MembershipRepository membershipRepository;
-    public StripeController(UserService userService, StripeService stripeService, @Value("${stripe.webhook.secret}") String webhookSecret, UserTitlesRepository userTitlesRepository,MembershipRepository membershipRepository) {
+    private final UserRepository userRepository;
+    public StripeController(UserService userService, StripeService stripeService, @Value("${stripe.webhook.secret}") String webhookSecret, UserTitlesRepository userTitlesRepository,MembershipRepository membershipRepository, UserRepository userRepository) {
         this.stripeService = stripeService;
         this.webhookSecret = webhookSecret;
         this.userService = userService;
         this.userTitlesRepository = userTitlesRepository;
         this.membershipRepository = membershipRepository;
+        this.userRepository = userRepository;
     }
 
     @GetMapping("/test-product")
@@ -328,6 +331,10 @@ public class StripeController {
                     user.setLastName(metadata.get("lastName"));
                     user.setPhoneNumber(metadata.get("phoneNumber"));
                     user.setPassword(metadata.get("password"));
+                    if(metadata.get("referredUserId") != null){
+                        user.setReferredBy(userRepository.findById(Long.valueOf(metadata.get("referredUserId")))
+                            .orElseThrow(() -> new RuntimeException("Referred User not found in database")));}
+
                     user.setIsInGoodStanding(false); // Still false until payment succeeds later
                     UserTitles foundingUserTitle = userTitlesRepository.findByTitle(metadata.get("userTitle"))
                             .orElseThrow(() -> new RuntimeException("Founding user title not found in database"));
@@ -400,6 +407,8 @@ public class StripeController {
             Membership membership = membershipRepository.findByName(userRequest.getMembershipName())
                     .orElseThrow(() -> new RuntimeException("Membership not found in database"));
 
+
+
             // Step 3: Create Stripe customer (but don’t save user yet)
             String customerId = stripeService.createCustomer(
                     null, // Email optional
@@ -415,12 +424,17 @@ public class StripeController {
             metadata.put("password", userRequest.getPassword()); // Consider hashing if sensitive
             metadata.put("userTitle", foundingUserTitle.getTitle()); // Store title name
             metadata.put("membership", membership.getName());
+            if (userRequest.getReferralId() != null) {
+                String   referredId = userRequest.getReferralId().toString();
+                metadata.put("referredUserId", referredId);
+            }
+
 
             // Step 5: Create Checkout session in setup mode with metadata
             String sessionId = stripeService.createSetupCheckoutSessionWithMetadata(
                     customerId,
-                    "https://boss-lifting-club.onrender.com/success",
-                    "https://boss-lifting-club.onrender.com/cancel",
+                    "https://www.cltliftingclub.com/success",
+                    "https://www.cltliftingclub.com/cancel",
                     metadata
             );
 

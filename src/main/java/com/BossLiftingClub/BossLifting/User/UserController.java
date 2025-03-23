@@ -205,5 +205,16 @@ public class UserController {
                 .orElse(ResponseEntity.notFound().build());
     }
 
+
+    @GetMapping("/referralCode/{referralCode}")
+    public ResponseEntity<User> getUserByReferralCode(@PathVariable String referralCode) {
+        User user = userService.getUserByReferralCode(referralCode); // Returns User or null
+        if (user != null) {
+            return ResponseEntity.ok(user); // 200 OK with user
+        } else {
+            return ResponseEntity.notFound().build(); // 404 Not Found
+        }
+    }
+
 }
 
