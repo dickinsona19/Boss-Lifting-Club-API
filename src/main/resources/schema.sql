@@ -28,7 +28,7 @@ CREATE TABLE users (
     user_title_id BIGINT,
     user_stripe_member_id VARCHAR(255) UNIQUE,
     membership_id BIGINT,
-    referral_code VARCHAR(255) UNIQUE NOT NULL,
+    referral_code VARCHAR(255) UNIQUE,
     referred_by_id BIGINT,
     FOREIGN KEY (user_title_id) REFERENCES user_titles(id),
     FOREIGN KEY (membership_id) REFERENCES membership(id),

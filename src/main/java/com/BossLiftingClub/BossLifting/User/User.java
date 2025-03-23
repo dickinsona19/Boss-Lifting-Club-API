@@ -55,10 +55,8 @@ public class User {
     @Lob
     private byte[] profilePicture;
 
-    @Column(name = "referral_code", nullable = false, unique = true)
+    @Column(name = "referral_code",  unique = true)
     private String referralCode;
-
-
 
     @ManyToOne
     @JoinColumn(name = "referred_by_id")
