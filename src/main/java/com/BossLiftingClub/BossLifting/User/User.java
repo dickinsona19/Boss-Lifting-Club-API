@@ -2,6 +2,7 @@ package com.BossLiftingClub.BossLifting.User;
 
 import com.BossLiftingClub.BossLifting.User.Membership.Membership;
 import com.BossLiftingClub.BossLifting.User.UserTitles.UserTitles;
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
 
 import java.time.LocalDateTime;
@@ -65,6 +66,7 @@ public class User {
 
 
     @OneToMany(mappedBy = "referredBy", cascade = CascadeType.ALL, orphanRemoval = true,  fetch = FetchType.LAZY)
+    @JsonIgnore
     private Set<User> referredMembers = new HashSet<>();
 
 
