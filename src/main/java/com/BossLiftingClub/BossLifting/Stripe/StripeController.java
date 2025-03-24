@@ -344,11 +344,6 @@ public class StripeController {
                     user.setMembership(membership);
                     user.setUserTitles(foundingUserTitle);
                     user.setUserStripeMemberId(customerId);
-                    user.setReferredMembersDto(
-                            user.getReferredMembers().stream()
-                                    .map(u -> new ReferredUserDto(u))
-                                    .collect(Collectors.toSet())
-                    );
                     System.out.println("userLog: "+user);
                     System.out.println("getReferredMembersDto: "+user.getReferredMembersDto());
                     userService.save(user);

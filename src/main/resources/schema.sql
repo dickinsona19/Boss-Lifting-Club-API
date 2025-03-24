@@ -54,9 +54,9 @@ VALUES ('Andrew', 'Dickinson', '$2a$10$3aKCw124a.sRwxdI98rUMuiiSolKeK.SbSNFii4fP
 -- Insert Alice, referred by Andrew (using his referral_code '1243ff2ds')
 INSERT INTO users (first_name, last_name, password, phone_number, is_in_good_standing, entry_qrcode_token, user_title_id, membership_id, referral_code, referred_by_id)
 VALUES ('Alice', 'Smith', 'AlicePass321', '9876543210', FALSE, '12345', 1, 2, '1243fds',
-        (SELECT id FROM users WHERE referral_code = '1243ff2ds'));
+        (SELECT id FROM users WHERE referral_code = '1243ff2ds23'));
 
 -- Insert Bob, referred by Andrew (using his referral_code '1243ff2ds')
 INSERT INTO users (first_name, last_name, password, phone_number, is_in_good_standing, entry_qrcode_token, user_title_id, membership_id, referral_code, referred_by_id)
 VALUES ('Bob', 'Brown', 'BobSecure456', '4567891230', TRUE, '11111', 1, 3, 'asfv335dsf',
-        (SELECT id FROM users WHERE referral_code = '1243ff2ds'));
+        (SELECT id FROM users WHERE referral_code = '1243ff2ds23'));
