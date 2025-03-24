@@ -34,4 +34,14 @@ public class MembershipController {
         }
         return new ResponseEntity<>(HttpStatus.NOT_FOUND);
     }
+
+    @DeleteMapping("/{id}")
+    public ResponseEntity<Void> deleteMembershipById(@PathVariable Long id) {
+        Membership membership = membershipService.getMembershipById(id);
+        if (membership != null) {
+            membershipService.deleteMembership(id);
+            return new ResponseEntity<>(HttpStatus.NO_CONTENT);
+        }
+        return new ResponseEntity<>(HttpStatus.NOT_FOUND);
+    }
 }
