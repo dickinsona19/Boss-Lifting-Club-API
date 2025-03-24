@@ -10,6 +10,7 @@ import com.stripe.exception.StripeException;
 import com.stripe.model.*;
 import com.stripe.model.checkout.Session;
 import com.stripe.net.Webhook;
+import com.stripe.param.SubscriptionCreateParams;
 import com.stripe.param.checkout.SessionCreateParams;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.ResponseEntity;
@@ -346,6 +347,23 @@ public class StripeController {
                         userService.save(user);
 
                         System.out.println("User created with ID: " + user.getId() + " for customer: " + customerId);
+
+                        // Create a subscription starting April 12, 2025
+                        long trialEndTimestamp = 1744416000L; // UNIX timestamp for April 12, 2025, 00:00 UTC
+                        String priceId = "price_12345"; // Replace with your actual $79.99/month Price ID from Stripe
+
+                        SubscriptionCreateParams subscriptionParams = SubscriptionCreateParams.builder()
+                                .setCustomer(customerId)
+                                .addItem(SubscriptionCreateParams.Item.builder()
+                                        .setPrice(priceId)
+                                        .build())
+                                .setDefaultPaymentMethod(paymentMethodId)
+                                .setTrialEnd(trialEndTimestamp)
+                                .build();
+
+                        Subscription subscription = Subscription.create(subscriptionParams);
+                        System.out.println("Subscription created with ID: " + subscription.getId() + " starting on April 12, 2025");
+
                     } else {
                         // No payment method provided, delete the Stripe customer
                         System.out.println("No payment method attached in setup intent: " + setupIntentId);
@@ -394,7 +412,6 @@ public class StripeController {
                 }
 
                 String customerId = session.getCustomer();
-                // Delete the Stripe customer since the session expired
                 stripeService.deleteCustomer(customerId);
                 System.out.println("Checkout session expired, deleted Stripe customer: " + customerId);
             }
