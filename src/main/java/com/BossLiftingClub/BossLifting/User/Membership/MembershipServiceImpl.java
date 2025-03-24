@@ -27,4 +27,8 @@ public class MembershipServiceImpl implements MembershipService {
         Optional<Membership> membership = membershipRepository.findById(id);
         return membership.orElse(null);
     }
+    @Override
+    public void deleteMembership(Long id) {
+        membershipRepository.deleteById(id);
+    }
 }

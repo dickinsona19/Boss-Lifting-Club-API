@@ -6,4 +6,5 @@ public interface MembershipService {
     Membership addMembership(Membership membership);
     List<Membership> getAllMemberships();
     Membership getMembershipById(Long id);
+    void deleteMembership(Long id);
 }
