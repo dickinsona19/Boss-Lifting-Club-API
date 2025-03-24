@@ -1,12 +1,9 @@
 package com.BossLiftingClub.BossLifting.Stripe;
 
 import com.BossLiftingClub.BossLifting.Stripe.RequestsAndResponses.*;
+import com.BossLiftingClub.BossLifting.User.*;
 import com.BossLiftingClub.BossLifting.User.Membership.Membership;
 import com.BossLiftingClub.BossLifting.User.Membership.MembershipRepository;
-import com.BossLiftingClub.BossLifting.User.User;
-import com.BossLiftingClub.BossLifting.User.UserRepository;
-import com.BossLiftingClub.BossLifting.User.UserRequest;
-import com.BossLiftingClub.BossLifting.User.UserService;
 import com.BossLiftingClub.BossLifting.User.UserTitles.UserTitles;
 import com.BossLiftingClub.BossLifting.User.UserTitles.UserTitlesRepository;
 import com.stripe.exception.StripeException;
@@ -21,6 +18,7 @@ import org.springframework.web.bind.annotation.*;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Optional;
+import java.util.stream.Collectors;
 
 @RestController
 public class StripeController {
@@ -331,9 +329,12 @@ public class StripeController {
                     user.setLastName(metadata.get("lastName"));
                     user.setPhoneNumber(metadata.get("phoneNumber"));
                     user.setPassword(metadata.get("password"));
-                    if(metadata.get("referredUserId") != null){
-                        user.setReferredBy(userRepository.findById(Long.valueOf(metadata.get("referredUserId")))
-                            .orElseThrow(() -> new RuntimeException("Referred User not found in database")));}
+                    if (metadata.get("referredUserId") != null) {
+                        User referrer = userRepository.findById(Long.valueOf(metadata.get("referredUserId")))
+                                .orElseThrow(() -> new RuntimeException("Referred User not found in database"));
+                        user.setReferredBy(referrer);
+                        referrer.getReferredMembers().add(user); // Ensure bidirectional consistency
+                    }
 
                     user.setIsInGoodStanding(false); // Still false until payment succeeds later
                     UserTitles foundingUserTitle = userTitlesRepository.findByTitle(metadata.get("userTitle"))
@@ -343,6 +344,11 @@ public class StripeController {
                     user.setMembership(membership);
                     user.setUserTitles(foundingUserTitle);
                     user.setUserStripeMemberId(customerId);
+                    user.setReferredMembersDto(
+                            user.getReferredMembers().stream()
+                                    .map(u -> new ReferredUserDto(u))
+                                    .collect(Collectors.toSet())
+                    );
                     System.out.println(user);
                     userService.save(user);
 

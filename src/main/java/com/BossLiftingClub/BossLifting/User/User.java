@@ -62,8 +62,13 @@ public class User {
     @JoinColumn(name = "referred_by_id")
     private User referredBy;
 
-    @OneToMany(mappedBy = "referredBy", cascade = CascadeType.ALL, orphanRemoval = true)
+
+
+    @OneToMany(mappedBy = "referredBy", cascade = CascadeType.ALL, orphanRemoval = true,  fetch = FetchType.EAGER)
     private Set<User> referredMembers = new HashSet<>();
+
+
+
     @Transient
     private Set<ReferredUserDto> referredMembersDto;
 
@@ -197,6 +202,16 @@ public class User {
 
     public void setReferredBy(User referredBy) {
         this.referredBy = referredBy;
+    }
+    public void setReferredMembersDto(Set<ReferredUserDto> referredMembersDto) {
+        this.referredMembersDto = referredMembersDto;
+    }
+    public Set<User> getReferredMembers() {
+        return referredMembers;
+    }
+
+    public void setReferredMembers(Set<User> referredMembers) {
+        this.referredMembers = referredMembers;
     }
 
 }
