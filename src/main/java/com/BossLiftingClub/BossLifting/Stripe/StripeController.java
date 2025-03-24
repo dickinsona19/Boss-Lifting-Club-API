@@ -333,7 +333,7 @@ public class StripeController {
                         User referrer = userRepository.findById(Long.valueOf(metadata.get("referredUserId")))
                                 .orElseThrow(() -> new RuntimeException("Referred User not found in database"));
                         user.setReferredBy(referrer);
-                        referrer.getReferredMembers().add(user); // Ensure bidirectional consistency
+
                     }
 
                     user.setIsInGoodStanding(false); // Still false until payment succeeds later
@@ -350,6 +350,7 @@ public class StripeController {
                                     .collect(Collectors.toSet())
                     );
                     System.out.println("userLog: "+user);
+                    System.out.println("getReferredMembersDto: "+user.getReferredMembersDto());
                     userService.save(user);
 
                     System.out.println("User created with ID: " + user.getId() + " for customer: " + customerId);

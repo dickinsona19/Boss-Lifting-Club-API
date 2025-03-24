@@ -64,7 +64,7 @@ public class User {
 
 
 
-    @OneToMany(mappedBy = "referredBy", cascade = CascadeType.ALL, orphanRemoval = true,  fetch = FetchType.EAGER)
+    @OneToMany(mappedBy = "referredBy", cascade = CascadeType.ALL, orphanRemoval = true,  fetch = FetchType.LAZY)
     private Set<User> referredMembers = new HashSet<>();
 
 
