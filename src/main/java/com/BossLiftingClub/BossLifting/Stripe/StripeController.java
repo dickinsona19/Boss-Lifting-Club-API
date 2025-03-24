@@ -349,7 +349,7 @@ public class StripeController {
                                     .map(u -> new ReferredUserDto(u))
                                     .collect(Collectors.toSet())
                     );
-                    System.out.println(user);
+                    System.out.println("userLog: "+user);
                     userService.save(user);
 
                     System.out.println("User created with ID: " + user.getId() + " for customer: " + customerId);
