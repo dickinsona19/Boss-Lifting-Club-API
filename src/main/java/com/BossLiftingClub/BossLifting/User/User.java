@@ -1,9 +1,13 @@
 package com.BossLiftingClub.BossLifting.User;
 
+import com.BossLiftingClub.BossLifting.User.Membership.Membership;
 import com.BossLiftingClub.BossLifting.User.UserTitles.UserTitles;
 import jakarta.persistence.*;
 
 import java.time.LocalDateTime;
+import java.util.HashSet;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 @Entity
 @Table(name = "users")
@@ -41,9 +45,53 @@ public class User {
     @JoinColumn(name = "user_title_id", referencedColumnName = "id")
     private UserTitles userTitles;
 
-    @Lob // Large Object for binary data
+    @Lob
+    @Column(name = "signature_data")
+    private byte[] signatureData;
+
+    @Column(name = "waiver_signed_date")
+    private LocalDateTime waiverSignedDate;
+
+    @Lob
     private byte[] profilePicture;
-    // Default constructor required by JPA
+
+    @Column(name = "referral_code",  unique = true)
+    private String referralCode;
+
+
+
+    @ManyToOne
+    @JoinColumn(name = "referred_by_id")
+    private User referredBy;
+
+    @OneToMany(mappedBy = "referredBy", cascade = CascadeType.ALL, orphanRemoval = true)
+    private Set<User> referredMembers = new HashSet<>();
+    @Transient
+    private Set<ReferredUserDto> referredMembersDto;
+
+    // Method to populate the DTO set
+    @PostLoad
+    @PostPersist
+    @PostUpdate
+    private void populateReferredMembersDto() {
+        this.referredMembersDto = referredMembers.stream()
+                .map(user -> new ReferredUserDto(user))
+                .collect(Collectors.toSet());
+    }
+
+    // Optional: Getter to ensure DTOs are populated if not already
+    public Set<ReferredUserDto> getReferredMembersDto() {
+        if (referredMembersDto == null) {
+            populateReferredMembersDto();
+        }
+        return referredMembersDto;
+    }
+
+
+    @ManyToOne
+    @JoinColumn(name = "membership_id")
+    private Membership membership;
+
     public User() {
     }
 
@@ -129,4 +177,28 @@ public class User {
     }
     public byte[] getProfilePicture() { return profilePicture; }
     public void setProfilePicture(byte[] profilePicture) { this.profilePicture = profilePicture; }
+    public byte[] getSignatureData() { return signatureData; }
+    public void setSignatureData(byte[] signatureData) { this.signatureData = signatureData; }
+
+    public LocalDateTime getWaiverSignedDate() { return waiverSignedDate; }
+    public void setWaiverSignedDate(LocalDateTime waiverSignedDate) { this.waiverSignedDate = waiverSignedDate; }
+
+    public Membership getMembership() { return membership; }
+    public void setMembership(Membership membership) { this.membership = membership; }
+
+    public String getReferralCode() {
+        return referralCode;
+    }
+
+    public void setReferralCode(String referralCode) {
+        this.referralCode = referralCode;
+    }
+    public User getReferredBy() {
+        return referredBy;
+    }
+
+    public void setReferredBy(User referredBy) {
+        this.referredBy = referredBy;
+    }
+
 }

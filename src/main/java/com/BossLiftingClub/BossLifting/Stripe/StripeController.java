@@ -1,9 +1,9 @@
 package com.BossLiftingClub.BossLifting.Stripe;
 
 import com.BossLiftingClub.BossLifting.Stripe.RequestsAndResponses.*;
-import com.BossLiftingClub.BossLifting.User.User;
-import com.BossLiftingClub.BossLifting.User.UserRequest;
-import com.BossLiftingClub.BossLifting.User.UserService;
+import com.BossLiftingClub.BossLifting.User.*;
+import com.BossLiftingClub.BossLifting.User.Membership.Membership;
+import com.BossLiftingClub.BossLifting.User.Membership.MembershipRepository;
 import com.BossLiftingClub.BossLifting.User.UserTitles.UserTitles;
 import com.BossLiftingClub.BossLifting.User.UserTitles.UserTitlesRepository;
 import com.stripe.exception.StripeException;
@@ -18,6 +18,7 @@ import org.springframework.web.bind.annotation.*;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Optional;
+import java.util.stream.Collectors;
 
 @RestController
 public class StripeController {
@@ -25,11 +26,15 @@ public class StripeController {
     private final String webhookSecret;
     private final UserService userService;
     private final UserTitlesRepository userTitlesRepository;
-    public StripeController(UserService userService, StripeService stripeService, @Value("${stripe.webhook.secret}") String webhookSecret, UserTitlesRepository userTitlesRepository) {
+    private final MembershipRepository membershipRepository;
+    private final UserRepository userRepository;
+    public StripeController(UserService userService, StripeService stripeService, @Value("${stripe.webhook.secret}") String webhookSecret, UserTitlesRepository userTitlesRepository,MembershipRepository membershipRepository, UserRepository userRepository) {
         this.stripeService = stripeService;
         this.webhookSecret = webhookSecret;
         this.userService = userService;
         this.userTitlesRepository = userTitlesRepository;
+        this.membershipRepository = membershipRepository;
+        this.userRepository = userRepository;
     }
 
     @GetMapping("/test-product")
@@ -291,6 +296,7 @@ public class StripeController {
         try {
             Event event = Webhook.constructEvent(payload, sigHeader, webhookSecret);
 
+            // Handle checkout.session.completed (successful payment method setup)
             if ("checkout.session.completed".equals(event.getType())) {
                 Session session = (Session) event.getDataObjectDeserializer().getObject().orElse(null);
                 if (session == null) {
@@ -310,32 +316,46 @@ public class StripeController {
                     SetupIntent setupIntent = SetupIntent.retrieve(setupIntentId);
                     String paymentMethodId = setupIntent.getPaymentMethod();
                     if (paymentMethodId != null) {
+                        // Payment method provided, attach it and proceed
                         stripeService.attachPaymentMethod(customerId, paymentMethodId);
                         System.out.println("Payment method " + paymentMethodId + " set as default for customer " + customerId);
+
+                        // Create user from metadata
+                        Map<String, String> metadata = session.getMetadata();
+                        User user = new User();
+                        user.setFirstName(metadata.get("firstName"));
+                        user.setLastName(metadata.get("lastName"));
+                        user.setPhoneNumber(metadata.get("phoneNumber"));
+                        user.setPassword(metadata.get("password"));
+                        if (metadata.get("referredUserId") != null) {
+                            User referrer = userRepository.findById(Long.valueOf(metadata.get("referredUserId")))
+                                    .orElseThrow(() -> new RuntimeException("Referred User not found in database"));
+                            user.setReferredBy(referrer);
+                        }
+
+                        user.setIsInGoodStanding(false); // Still false until payment succeeds later
+                        UserTitles foundingUserTitle = userTitlesRepository.findByTitle(metadata.get("userTitle"))
+                                .orElseThrow(() -> new RuntimeException("Founding user title not found in database"));
+                        Membership membership = membershipRepository.findByName(metadata.get("membership"))
+                                .orElseThrow(() -> new RuntimeException("Founding user title not found in database"));
+                        user.setMembership(membership);
+                        user.setUserTitles(foundingUserTitle);
+                        user.setUserStripeMemberId(customerId);
+                        System.out.println("userLog: " + user);
+                        System.out.println("getReferredMembersDto: " + user.getReferredMembersDto());
+                        userService.save(user);
+
+                        System.out.println("User created with ID: " + user.getId() + " for customer: " + customerId);
                     } else {
+                        // No payment method provided, delete the Stripe customer
                         System.out.println("No payment method attached in setup intent: " + setupIntentId);
+                        stripeService.deleteCustomer(customerId);
+                        System.out.println("Deleted Stripe customer " + customerId + " due to no payment method.");
                         return ResponseEntity.status(400).body("No payment method found in setup intent");
                     }
 
-                    // Create user from metadata
-                    Map<String, String> metadata = session.getMetadata();
-                    User user = new User();
-                    user.setFirstName(metadata.get("firstName"));
-                    user.setLastName(metadata.get("lastName"));
-                    user.setPhoneNumber(metadata.get("phoneNumber"));
-                    user.setPassword(metadata.get("password"));
-                    user.setIsInGoodStanding(false); // Still false until payment succeeds later
-                    UserTitles foundingUserTitle = userTitlesRepository.findByTitle(metadata.get("userTitle"))
-                            .orElseThrow(() -> new RuntimeException("Founding user title not found in database"));
-                    user.setUserTitles(foundingUserTitle);
-                    user.setUserStripeMemberId(customerId);
-                    System.out.println(user);
-                    userService.save(user);
-
-                    System.out.println("User created with ID: " + user.getId() + " for customer: " + customerId);
-
                 } else if ("subscription".equals(mode)) {
-                    // Handle subscription mode (unchanged from your original logic)
+                    // Handle subscription mode (unchanged)
                     String subscriptionId = session.getSubscription();
                     if (subscriptionId == null) {
                         return ResponseEntity.status(400).body("No subscription found in session");
@@ -366,6 +386,19 @@ public class StripeController {
                 }
             }
 
+            // Handle checkout.session.expired (user canceled or session timed out)
+            if ("checkout.session.expired".equals(event.getType())) {
+                Session session = (Session) event.getDataObjectDeserializer().getObject().orElse(null);
+                if (session == null) {
+                    return ResponseEntity.status(400).body("Invalid session data");
+                }
+
+                String customerId = session.getCustomer();
+                // Delete the Stripe customer since the session expired
+                stripeService.deleteCustomer(customerId);
+                System.out.println("Checkout session expired, deleted Stripe customer: " + customerId);
+            }
+
             return ResponseEntity.ok("Webhook handled");
         } catch (StripeException e) {
             e.printStackTrace();
@@ -379,18 +412,20 @@ public class StripeController {
         try {
             // Step 1: Check if phone number already exists
             Optional<User> existingUser = userService.getUserByPhoneNumber(userRequest.getPhoneNumber());
-            if (existingUser.isPresent()) { // Use isPresent() instead of != null
+            if (existingUser.isPresent()) {
                 System.out.println("Existing user found: " + existingUser.get());
                 Map<String, String> errorResponse = new HashMap<>();
                 errorResponse.put("error", "PhoneNumber already in use");
                 return ResponseEntity.badRequest().body(errorResponse); // 400 Bad Request
             }
 
-            // Step 2: Fetch the "founding_user" title from the database
+            // Step 2: Fetch the "founding_user" title and membership from the database
             UserTitles foundingUserTitle = userTitlesRepository.findByTitle("Founding User")
                     .orElseThrow(() -> new RuntimeException("Founding user title not found in database"));
+            Membership membership = membershipRepository.findByName(userRequest.getMembershipName())
+                    .orElseThrow(() -> new RuntimeException("Membership not found in database"));
 
-            // Step 3: Create Stripe customer (but don’t save user yet)
+            // Step 3: Create Stripe customer (we'll clean up in webhook if no payment info)
             String customerId = stripeService.createCustomer(
                     null, // Email optional
                     userRequest.getFirstName() + " " + userRequest.getLastName(),
@@ -403,13 +438,18 @@ public class StripeController {
             metadata.put("lastName", userRequest.getLastName());
             metadata.put("phoneNumber", userRequest.getPhoneNumber());
             metadata.put("password", userRequest.getPassword()); // Consider hashing if sensitive
-            metadata.put("userTitle", foundingUserTitle.getTitle()); // Store title name
+            metadata.put("userTitle", foundingUserTitle.getTitle());
+            metadata.put("membership", membership.getName());
+            if (userRequest.getReferralId() != null) {
+                String referredId = userRequest.getReferralId().toString();
+                metadata.put("referredUserId", referredId);
+            }
 
             // Step 5: Create Checkout session in setup mode with metadata
             String sessionId = stripeService.createSetupCheckoutSessionWithMetadata(
                     customerId,
-                    "https://boss-lifting-club.onrender.com/success",
-                    "https://boss-lifting-club.onrender.com/cancel",
+                    "https://www.cltliftingclub.com/success",
+                    "https://www.cltliftingclub.com/cancel",
                     metadata
             );
 

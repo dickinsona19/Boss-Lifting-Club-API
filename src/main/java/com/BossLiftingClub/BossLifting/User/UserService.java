@@ -17,4 +17,5 @@ public interface UserService {
     User signIn(Map<String, String> requestBody) throws Exception;
     User signInWithPhoneNumber(String phoneNumber, String password) throws Exception;
     Optional<User> updateProfilePicture(Long id, byte[] profilePicture);
+    User getUserByReferralCode(String referralCode);
 }

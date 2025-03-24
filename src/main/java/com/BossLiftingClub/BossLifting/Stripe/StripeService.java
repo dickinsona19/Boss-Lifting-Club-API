@@ -297,6 +297,10 @@ public class StripeService {
         Session session = Session.create(sessionParams);
         return session.getId();
     }
+    public void deleteCustomer(String customerId) throws StripeException {
+        Customer customer = Customer.retrieve(customerId);
+        customer.delete();
+    }
 
     public String createSetupCheckoutSession(String customerId, String successUrl, String cancelUrl) throws StripeException {
         Map<String, Object> sessionParams = new HashMap<>();
