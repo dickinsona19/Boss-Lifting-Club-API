@@ -350,7 +350,7 @@ public class StripeController {
 
                         // Create a subscription starting April 12, 2025
                         long trialEndTimestamp = 1744416000L; // UNIX timestamp for April 12, 2025, 00:00 UTC
-                        String priceId = "price_1R6II54PBwB8fzGsIhXvOVuT"; // Replace with your actual $79.99/month Price ID from Stripe
+                        String priceId = "price_1R6aIfGHcVHSTvgIlwN3wmyD"; // Replace with your actual $79.99/month Price ID from Stripe
 
                         SubscriptionCreateParams subscriptionParams = SubscriptionCreateParams.builder()
                                 .setCustomer(customerId)
