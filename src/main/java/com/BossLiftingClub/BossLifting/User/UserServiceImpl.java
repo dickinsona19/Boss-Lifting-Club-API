@@ -6,10 +6,8 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
 import java.security.SecureRandom;
-import java.util.List;
-import java.util.Map;
-import java.util.Optional;
-import java.util.Random;
+import java.time.LocalDateTime;
+import java.util.*;
 
 @Service
 public class UserServiceImpl implements UserService {
@@ -163,5 +161,23 @@ public class UserServiceImpl implements UserService {
         }
 
         return user; // Return the user object on successful login
+    }
+    @Override
+    public User saveWaiverSignature(Long userId, String base64Signature) throws Exception {
+        Optional<User> userOptional = userRepository.findById(userId);
+        if (userOptional.isPresent()) {
+            User user = userOptional.get();
+
+            // Decode Base64 string to byte[]
+            byte[] signatureBytes = Base64.getDecoder().decode(base64Signature);
+            user.setSignatureData(signatureBytes);
+
+            // Set current date and time
+            user.setWaiverSignedDate(LocalDateTime.now());
+
+            return userRepository.save(user);
+        } else {
+            throw new Exception("User not found with ID: " + userId);
+        }
     }
 }

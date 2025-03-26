@@ -1,6 +1,7 @@
 package com.BossLiftingClub.BossLifting.User;
 
 import com.BossLiftingClub.BossLifting.User.PasswordAuth.JwtUtil;
+import com.BossLiftingClub.BossLifting.User.Waiver.WaiverRequest;
 import com.stripe.model.Customer;
 import com.stripe.model.billingportal.Session;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -213,6 +214,18 @@ public class UserController {
             return ResponseEntity.ok(user); // 200 OK with user
         } else {
             return ResponseEntity.notFound().build(); // 404 Not Found
+        }
+    }
+
+    @PostMapping("/{userId}/waiver")
+    public ResponseEntity<String> saveWaiverSignature(
+            @PathVariable Long userId,
+            @RequestBody WaiverRequest waiverRequest) {
+        try {
+            userService.saveWaiverSignature(userId, waiverRequest.getSignature());
+            return ResponseEntity.ok("Waiver signature saved successfully");
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body("Error saving waiver signature: " + e.getMessage());
         }
     }
 

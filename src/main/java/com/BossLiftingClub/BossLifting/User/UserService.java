@@ -18,4 +18,5 @@ public interface UserService {
     User signInWithPhoneNumber(String phoneNumber, String password) throws Exception;
     Optional<User> updateProfilePicture(Long id, byte[] profilePicture);
     User getUserByReferralCode(String referralCode);
+    User saveWaiverSignature(Long userId, String base64Signature) throws Exception;
 }
