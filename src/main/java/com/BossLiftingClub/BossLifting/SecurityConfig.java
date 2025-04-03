@@ -31,21 +31,30 @@ public class SecurityConfig {
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration config = new CorsConfiguration();
-        config.setAllowedOrigins(List.of(
-                "http://localhost:5173",        // Vite/React default
-                "http://localhost:8081",        // Your current frontend
-                "https://boss-lifting-club.onrender.com", //Production 1
-                "www.cltliftingclub.com",       // Production 2
-                "https://www.cltliftingclub.com", // Production 3
-                "https://joyful-sunflower-8144bb.netlify.app",
-                "https://joyful-sunflower-8144bb.netlify.app/events"
-        ));
-        config.setAllowedMethods(List.of("GET", "POST", "OPTIONS", "DELETE", "PUT")); // Include OPTIONS for preflight
-        config.setAllowedHeaders(List.of("*")); // Allow all headers
-        config.setAllowCredentials(false); // No cookies/credentials needed yet
 
+        // Define allowed origins
+        config.setAllowedOrigins(List.of(
+                "http://localhost:5173",        // Vite/React default (web dev)
+                "http://localhost:8081",        // Local frontend (web dev)
+                "https://boss-lifting-club.onrender.com", // Production web 1
+                "https://www.cltliftingclub.com", // Production web 2
+                "https://joyful-sunflower-8144bb.netlify.app", // Production web 3
+                "*"                             // Allow all origins (for mobile app direct requests)
+        ));
+
+        // Allowed HTTP methods (same as web)
+        config.setAllowedMethods(List.of("GET", "POST", "OPTIONS", "DELETE", "PUT"));
+
+        // Allowed headers (same as web)
+        config.setAllowedHeaders(List.of("*"));
+
+        // Credentials: Set to true if your app needs cookies or auth headers
+        // Note: If true, you CANNOT use "*" in allowedOrigins; list specific origins instead
+        config.setAllowCredentials(false); // Change to true if needed
+
+        // Apply this config to all paths
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
-        source.registerCorsConfiguration("/**", config); // Apply to all paths
+        source.registerCorsConfiguration("/**", config);
         return source;
     }
 
