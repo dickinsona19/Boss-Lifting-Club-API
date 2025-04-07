@@ -216,15 +216,14 @@ public class UserController {
             return ResponseEntity.notFound().build(); // 404 Not Found
         }
     }
+
     @PutMapping("/referralCode/{referralCode}")
-    public ResponseEntity<User> updateUserReferralCode(
+    public ResponseEntity<Void> updateUserReferralCode(
             @PathVariable String referralCode,
             @RequestBody String newReferralCode) {
-        User user = userService.getUserByReferralCode(referralCode);
-        if (user != null) {
-            user.setReferralCode(newReferralCode);
-            User updatedUser = userService.updateUser(user);
-            return ResponseEntity.ok(updatedUser); // 200 OK with updated user
+        boolean updated = userService.updateReferralCode(referralCode, newReferralCode);
+        if (updated) {
+            return ResponseEntity.ok().build(); // 200 OK
         } else {
             return ResponseEntity.notFound().build(); // 404 Not Found
         }

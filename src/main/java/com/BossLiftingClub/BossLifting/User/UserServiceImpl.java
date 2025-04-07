@@ -25,6 +25,11 @@ public class UserServiceImpl implements UserService {
         this.passwordEncoder = passwordEncoder;
 
     }
+
+    @Transactional
+    public boolean updateReferralCode(String currentReferralCode, String newReferralCode) {
+        return userRepository.updateReferralCode(currentReferralCode, newReferralCode) > 0;
+    }
     @Override
     public User getUserByReferralCode(String referralCode) {
         User userOptional = userRepository.findByReferralCode(referralCode);
