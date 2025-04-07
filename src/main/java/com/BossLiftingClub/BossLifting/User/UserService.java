@@ -19,4 +19,6 @@ public interface UserService {
     Optional<User> updateProfilePicture(Long id, byte[] profilePicture);
     User getUserByReferralCode(String referralCode);
     User saveWaiverSignature(Long userId, String base64Signature) throws Exception;
+    User updateUser(User user);
+    boolean existsByReferralCode(String referralCode);
 }
