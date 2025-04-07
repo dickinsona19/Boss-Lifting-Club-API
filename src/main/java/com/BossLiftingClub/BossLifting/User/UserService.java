@@ -21,4 +21,6 @@ public interface UserService {
     User saveWaiverSignature(Long userId, String base64Signature) throws Exception;
     User updateUser(User user);
     boolean existsByReferralCode(String referralCode);
+
+    boolean updateReferralCode(String referralCode, String newReferralCode);
 }
