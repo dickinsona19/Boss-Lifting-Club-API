@@ -11,4 +11,5 @@ public interface UserRepository extends JpaRepository<User, Long> {
     Optional<User> findByPhoneNumber(String phoneNumber);
     Optional<User> findByUserStripeMemberId(String stripeCustomerId);
     User findByReferralCode(String referralCode);
+    boolean existsByReferralCode(String referralCode);
 }

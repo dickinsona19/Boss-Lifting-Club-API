@@ -4,6 +4,7 @@ package com.BossLiftingClub.BossLifting.User;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.security.SecureRandom;
 import java.time.LocalDateTime;
@@ -23,6 +24,25 @@ public class UserServiceImpl implements UserService {
         this.userRepository = userRepository;
         this.passwordEncoder = passwordEncoder;
 
+    }
+    @Override
+    public User getUserByReferralCode(String referralCode) {
+        User userOptional = userRepository.findByReferralCode(referralCode);
+        if (userOptional != null) {
+            return userOptional;
+        }
+        return null;
+    }
+
+    @Override
+    @Transactional
+    public User updateUser(User user) {
+        return userRepository.save(user);
+    }
+
+    @Override
+    public boolean existsByReferralCode(String referralCode) {
+        return userRepository.existsByReferralCode(referralCode);
     }
     @Override
     public Optional<User> updateProfilePicture(Long id, byte[] profilePicture) {
@@ -70,10 +90,7 @@ public class UserServiceImpl implements UserService {
     public Optional<User> getUserByPhoneNumber(String phoneNumber) {
         return userRepository.findByPhoneNumber(phoneNumber);
     }
-    @Override
-    public User getUserByReferralCode(String referralCode){
-        return userRepository.findByReferralCode(referralCode);
-    }
+
 
     @Override
     public Optional<User> deleteUserWithPhoneNumber(String phoneNumber) {
