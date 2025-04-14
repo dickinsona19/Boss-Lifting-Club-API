@@ -196,12 +196,14 @@ public class UserController {
     }
 
     // Update user profile picture
-    @PutMapping("/{id}/picture")
-    public ResponseEntity<User> updateProfilePicture(@PathVariable Long id,
-                                                     @RequestParam("picture") MultipartFile picture) throws IOException {
-        return userService.updateProfilePicture(id, picture.getBytes())
-                .map(ResponseEntity::ok)
-                .orElse(ResponseEntity.notFound().build());
+    @PostMapping("/{id}/picture")
+    public ResponseEntity<UserDTO> updateProfilePicture(
+            @PathVariable Long id,
+            @RequestParam("file") MultipartFile file) throws IOException {
+        byte[] profilePicture = file.getBytes();
+        return userService.updateProfilePicture(id, profilePicture)
+                .map(user -> ResponseEntity.ok(new UserDTO(user)))
+                .orElseGet(() -> ResponseEntity.notFound().build());
     }
 
 
