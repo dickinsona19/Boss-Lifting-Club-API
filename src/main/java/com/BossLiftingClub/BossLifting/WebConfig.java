@@ -20,5 +20,13 @@ public class WebConfig implements WebMvcConfigurer {
     public void addResourceHandlers(ResourceHandlerRegistry registry) {
         registry.addResourceHandler("/passes/**")
                 .addResourceLocations("file:temp/passes/");
+
+        registry.addResourceHandler("/static/**")
+                .addResourceLocations("classpath:/static/")
+                .setCachePeriod(0);
+
+        // Explicitly disable resource handling for /users/**
+        registry.addResourceHandler("/users/**")
+                .resourceChain(false); // Disables resource handling for this path
     }
 }
