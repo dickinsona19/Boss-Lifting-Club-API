@@ -6,6 +6,7 @@ import com.BossLiftingClub.BossLifting.User.Membership.Membership;
 import com.BossLiftingClub.BossLifting.User.Membership.MembershipRepository;
 import com.BossLiftingClub.BossLifting.User.UserTitles.UserTitles;
 import com.BossLiftingClub.BossLifting.User.UserTitles.UserTitlesRepository;
+import com.stripe.exception.SignatureVerificationException;
 import com.stripe.exception.StripeException;
 import com.stripe.model.*;
 import com.stripe.model.checkout.Session;
@@ -13,6 +14,7 @@ import com.stripe.net.Webhook;
 import com.stripe.param.SubscriptionCreateParams;
 import com.stripe.param.checkout.SessionCreateParams;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -36,75 +38,6 @@ public class StripeController {
         this.userTitlesRepository = userTitlesRepository;
         this.membershipRepository = membershipRepository;
         this.userRepository = userRepository;
-    }
-
-    @GetMapping("/test-product")
-    public StripeProductResponse testProduct() throws StripeException {
-        return stripeService.createProduct("Test Product", "A test item", 1000L, "usd");
-
-    }
-
-    @GetMapping("/test-payment")
-    public PaymentResponse testPayment() throws StripeException {
-        // Build the Checkout Session parameters
-        SessionCreateParams params = SessionCreateParams.builder()
-                .setSuccessUrl("https://localhost:8081/success")
-                .setCancelUrl("https://localhost:8081/cancel")
-                .addPaymentMethodType(SessionCreateParams.PaymentMethodType.CARD)
-                .addLineItem(
-                        SessionCreateParams.LineItem.builder()
-                                .setQuantity(1L)
-                                .setPriceData(
-                                        SessionCreateParams.LineItem.PriceData.builder()
-                                                .setCurrency("usd")
-                                                .setUnitAmount(1000L) // amount in cents ($10.00)
-                                                .setProductData(
-                                                        SessionCreateParams.LineItem.PriceData.ProductData.builder()
-                                                                .setName("Test Payment")
-                                                                .build()
-                                                )
-                                                .build()
-                                )
-                                .build()
-                )
-                .setMode(SessionCreateParams.Mode.PAYMENT)
-                .build();
-
-        // Create the Checkout Session
-        Session session = Session.create(params);
-
-        // Build and return the PaymentResponse with the payment link
-        PaymentResponse response = new PaymentResponse();
-        response.setPaymentLink(session.getUrl());
-        return response;
-    }
-
-    @GetMapping("/test-payment/{token}")
-    public PaymentResponse testPaymentWithID(@PathVariable String token) throws StripeException {
-        // Replace "price_XXXXXXXXXXXX" with your actual Price ID from the Stripe Dashboard.
-        String priceId = "price_"+token;
-
-        // Build the Checkout Session parameters using the existing Price ID.
-        SessionCreateParams params = SessionCreateParams.builder()
-                .setSuccessUrl("https://yourdomain.com/success")
-                .setCancelUrl("https://yourdomain.com/cancel")
-                .addPaymentMethodType(SessionCreateParams.PaymentMethodType.CARD)
-                .addLineItem(
-                        SessionCreateParams.LineItem.builder()
-                                .setQuantity(1L)
-                                .setPrice(priceId)
-                                .build()
-                )
-                .setMode(SessionCreateParams.Mode.PAYMENT)
-                .build();
-
-        // Create the Checkout Session
-        Session session = Session.create(params);
-
-        // Build and return the PaymentResponse with the payment link
-        PaymentResponse response = new PaymentResponse();
-        response.setPaymentLink(session.getUrl());
-        return response;
     }
 
     // Create Product and Price
@@ -372,36 +305,38 @@ public class StripeController {
                         return ResponseEntity.status(400).body("No payment method found in setup intent");
                     }
 
-                } else if ("subscription".equals(mode)) {
-                    // Handle subscription mode (unchanged)
-                    String subscriptionId = session.getSubscription();
-                    if (subscriptionId == null) {
-                        return ResponseEntity.status(400).body("No subscription found in session");
-                    }
-
-                    Subscription subscription = Subscription.retrieve(subscriptionId);
-                    String invoiceId = subscription.getLatestInvoice();
-                    if (invoiceId == null) {
-                        return ResponseEntity.status(400).body("No invoice found for subscription");
-                    }
-                    Invoice invoice = Invoice.retrieve(invoiceId);
-                    String paymentIntentId = invoice.getPaymentIntent();
-
-                    if (paymentIntentId != null) {
-                        PaymentIntent paymentIntent = PaymentIntent.retrieve(paymentIntentId);
-                        String paymentMethodId = paymentIntent.getPaymentMethod();
-                        stripeService.attachPaymentMethod(customerId, paymentMethodId);
-                    } else {
-                        String defaultPaymentMethodId = subscription.getDefaultPaymentMethod();
-                        if (defaultPaymentMethodId != null) {
-                            stripeService.attachPaymentMethod(customerId, defaultPaymentMethodId);
-                        } else {
-                            System.out.println("No payment method found for subscription: " + subscriptionId);
-                        }
-                    }
-
-                    userService.updateUserAfterPayment(customerId);
                 }
+
+//                else if ("subscription".equals(mode)) {
+//                    // Handle subscription mode (unchanged)
+//                    String subscriptionId = session.getSubscription();
+//                    if (subscriptionId == null) {
+//                        return ResponseEntity.status(400).body("No subscription found in session");
+//                    }
+//
+//                    Subscription subscription = Subscription.retrieve(subscriptionId);
+//                    String invoiceId = subscription.getLatestInvoice();
+//                    if (invoiceId == null) {
+//                        return ResponseEntity.status(400).body("No invoice found for subscription");
+//                    }
+//                    Invoice invoice = Invoice.retrieve(invoiceId);
+//                    String paymentIntentId = invoice.getPaymentIntent();
+//
+//                    if (paymentIntentId != null) {
+//                        PaymentIntent paymentIntent = PaymentIntent.retrieve(paymentIntentId);
+//                        String paymentMethodId = paymentIntent.getPaymentMethod();
+//                        stripeService.attachPaymentMethod(customerId, paymentMethodId);
+//                    } else {
+//                        String defaultPaymentMethodId = subscription.getDefaultPaymentMethod();
+//                        if (defaultPaymentMethodId != null) {
+//                            stripeService.attachPaymentMethod(customerId, defaultPaymentMethodId);
+//                        } else {
+//                            System.out.println("No payment method found for subscription: " + subscriptionId);
+//                        }
+//                    }
+//
+//                    userService.updateUserAfterPayment(customerId);
+//                }
             }
 
             // Handle checkout.session.expired (user canceled or session timed out)
@@ -478,6 +413,65 @@ public class StripeController {
         } catch (Exception e) {
             e.printStackTrace();
             return ResponseEntity.status(500).body(Map.of("error", "Failed: " + e.getMessage()));
+        }
+    }
+    @PostMapping("/StripeSubscriptionHandler")
+    public ResponseEntity<String> handleStripeWebhook(
+            @RequestBody String payload,
+            @RequestHeader("Stripe-Signature") String sigHeader) {
+
+        try {
+            // Verify webhook signature
+            Event event = Webhook.constructEvent(payload, sigHeader, webhookSecret);
+
+            // Deserialize the event data object
+            EventDataObjectDeserializer dataObjectDeserializer = event.getDataObjectDeserializer();
+            if (!dataObjectDeserializer.getObject().isPresent()) {
+                return new ResponseEntity<>("Invalid event data", HttpStatus.BAD_REQUEST);
+            }
+
+            // Handle specific events
+            String eventType = event.getType();
+            switch (eventType) {
+                case "customer.subscription.created":
+                case "customer.subscription.updated":
+                    Subscription subscription = (Subscription) dataObjectDeserializer.getObject().get();
+                    String customerId = subscription.getCustomer();
+                    String status = subscription.getStatus();
+
+                    // Update user status based on subscription status
+                    boolean isInGoodStanding = "active".equals(status) || "trialing".equals(status);
+                    userService.updateUserAfterPayment(customerId, isInGoodStanding);
+                    break;
+
+                case "invoice.paid":
+                    // Handle successful payment
+                    com.stripe.model.Invoice invoice = (com.stripe.model.Invoice) dataObjectDeserializer.getObject().get();
+                    userService.updateUserAfterPayment(invoice.getCustomer(), true);
+                    break;
+
+                case "invoice.payment_failed":
+                    // Handle failed payment
+                    com.stripe.model.Invoice failedInvoice = (com.stripe.model.Invoice) dataObjectDeserializer.getObject().get();
+                    userService.updateUserAfterPayment(failedInvoice.getCustomer(), false);
+                    break;
+
+                case "customer.subscription.deleted":
+                    // Handle subscription cancellation
+                    Subscription deletedSubscription = (Subscription) dataObjectDeserializer.getObject().get();
+                    userService.updateUserAfterPayment(deletedSubscription.getCustomer(), false);
+                    break;
+
+                default:
+                    // Ignore unhandled events
+                    System.out.println("Unhandled event type: " + eventType);
+            }
+
+            return new ResponseEntity<>("Webhook processed", HttpStatus.OK);
+        } catch (SignatureVerificationException e) {
+            return new ResponseEntity<>("Invalid signature", HttpStatus.BAD_REQUEST);
+        } catch (Exception e) {
+            return new ResponseEntity<>("Webhook error: " + e.getMessage(), HttpStatus.INTERNAL_SERVER_ERROR);
         }
     }
 }

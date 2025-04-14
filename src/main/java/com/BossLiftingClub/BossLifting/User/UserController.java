@@ -1,7 +1,6 @@
 package com.BossLiftingClub.BossLifting.User;
 
 import com.BossLiftingClub.BossLifting.User.PasswordAuth.JwtUtil;
-import com.BossLiftingClub.BossLifting.User.Waiver.WaiverRequest;
 import com.stripe.model.Customer;
 import com.stripe.model.billingportal.Session;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -32,7 +31,12 @@ public class UserController {
 
     @Autowired
     private JwtUtil jwtUtil;
-
+    @GetMapping("/{id}/media")
+    public ResponseEntity<UserMediaDTO> getUserMedia(@PathVariable Long id) {
+        return userService.findById(id)
+                .map(user -> ResponseEntity.ok(new UserMediaDTO(user)))
+                .orElseGet(() -> ResponseEntity.notFound().build());
+    }
     @PostMapping("/signin")
     public ResponseEntity<Map<String, Object>> signIn(@RequestBody Map<String, String> requestBody) {
         try {
@@ -45,12 +49,11 @@ public class UserController {
                 return ResponseEntity.status(400).body(errorResponse);
             }
 
-            // Validate phone number and password with your service
             User user = userService.signInWithPhoneNumber(phoneNumber, password);
-            String token = jwtUtil.generateToken(phoneNumber); // Use phoneNumber as the subject
+            String token = jwtUtil.generateToken(phoneNumber);
 
             Map<String, Object> response = new HashMap<>();
-            response.put("user", user);
+            response.put("user", new UserMediaDTO(user)); // Use DTO to control serialization
             response.put("token", token);
             return ResponseEntity.ok(response);
         } catch (Exception e) {
@@ -59,7 +62,6 @@ public class UserController {
             return ResponseEntity.status(401).body(errorResponse);
         }
     }
-
 
 
     // Get all users
@@ -198,12 +200,14 @@ public class UserController {
     }
 
     // Update user profile picture
-    @PutMapping("/{id}/picture")
-    public ResponseEntity<User> updateProfilePicture(@PathVariable Long id,
-                                                     @RequestParam("picture") MultipartFile picture) throws IOException {
-        return userService.updateProfilePicture(id, picture.getBytes())
-                .map(ResponseEntity::ok)
-                .orElse(ResponseEntity.notFound().build());
+    @PostMapping("/{id}/picture")
+    public ResponseEntity<UserMediaDTO> updateProfilePicture(
+            @PathVariable Long id,
+            @RequestParam("file") MultipartFile file) throws IOException {
+        byte[] profilePicture = file.getBytes();
+        return userService.updateProfilePicture(id, profilePicture)
+                .map(user -> ResponseEntity.ok(new UserMediaDTO(user)))
+                .orElseGet(() -> ResponseEntity.notFound().build());
     }
 
 
@@ -229,16 +233,13 @@ public class UserController {
         }
     }
 
-    @PostMapping("/{userId}/waiver")
-    public ResponseEntity<String> saveWaiverSignature(
-            @PathVariable Long userId,
-            @RequestBody WaiverRequest waiverRequest) {
-        try {
-            userService.saveWaiverSignature(userId, waiverRequest.getSignature());
-            return ResponseEntity.ok("Waiver signature saved successfully");
-        } catch (Exception e) {
-            return ResponseEntity.badRequest().body("Error saving waiver signature: " + e.getMessage());
-        }
+    @PostMapping("/{id}/waiver")
+    public ResponseEntity<UserMediaDTO> saveWaiverSignature(
+            @PathVariable Long id,
+            @RequestBody Map<String, String> requestBody) throws Exception {
+        String base64Signature = requestBody.get("signature");
+        User user = userService.saveWaiverSignature(id, base64Signature);
+        return ResponseEntity.ok(new UserMediaDTO(user));
     }
 
 }

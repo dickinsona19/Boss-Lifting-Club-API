@@ -10,7 +10,7 @@ public interface UserService {
     User save(User user) throws Exception;
     void deleteById(Long id);
     Optional<User> getUserByBarcodeToken(String barcodeToken);
-    User updateUserAfterPayment(String stripeCustomerId);
+    User updateUserAfterPayment(String stripeCustomerId, boolean standing);
     User updateUserPaymentFailed(String stripeCustomerId);
     Optional<User> getUserByPhoneNumber(String phoneNumber);
     Optional<User> deleteUserWithPhoneNumber(String PhoneNumber);

@@ -2,6 +2,7 @@ package com.BossLiftingClub.BossLifting.User;
 
 import com.BossLiftingClub.BossLifting.User.Membership.Membership;
 import com.BossLiftingClub.BossLifting.User.UserTitles.UserTitles;
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
 
 import java.time.LocalDateTime;
@@ -47,12 +48,16 @@ public class User {
 
     @Lob
     @Column(name = "signature_data")
+    @Basic(fetch = FetchType.LAZY) // Explicitly set to LAZY
+    @JsonIgnore // Prevent serialization to avoid LOB access during JSON response
     private byte[] signatureData;
 
     @Column(name = "waiver_signed_date")
     private LocalDateTime waiverSignedDate;
 
     @Lob
+    @Basic(fetch = FetchType.LAZY) // Explicitly set to LAZY
+    @JsonIgnore // Prevent serialization to avoid LOB access during JSON response
     private byte[] profilePicture;
 
     @Column(name = "referral_code",  unique = true)
