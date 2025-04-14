@@ -77,14 +77,14 @@ public class UserController {
 
         Map<String, Object> response = new HashMap<>();
         if (deletedUser.isPresent()) {
-            response.put("message", "User deleted successfully");
-            response.put("deletedUser", deletedUser.get());
+            response.put("message", "User with ID " + deletedUser.get().getId() + " was deleted successfully.");
             return ResponseEntity.ok(response);
         } else {
-            response.put("error", "User with phone number " + phoneNumber + " not found");
+            response.put("error", "User with phone number " + phoneNumber + " not found.");
             return ResponseEntity.status(404).body(response);
         }
     }
+
     // Get a single user by id
     @GetMapping("/{id}")
     public ResponseEntity<User> getUserById(@PathVariable Long id) {
