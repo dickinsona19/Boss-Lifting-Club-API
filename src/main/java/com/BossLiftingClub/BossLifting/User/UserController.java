@@ -53,7 +53,7 @@ public class UserController {
             String token = jwtUtil.generateToken(phoneNumber);
 
             Map<String, Object> response = new HashMap<>();
-            response.put("user", new UserMediaDTO(user)); // Use DTO to control serialization
+            response.put("user", user); // Use DTO to control serialization
             response.put("token", token);
             return ResponseEntity.ok(response);
         } catch (Exception e) {
