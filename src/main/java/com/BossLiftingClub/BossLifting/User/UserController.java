@@ -133,11 +133,14 @@ public class UserController {
                 .orElse(ResponseEntity.notFound().build());
     }
 
-    @GetMapping("barcode/{barcode}")
-    public ResponseEntity<User> getByBarcode(@PathVariable String barcode) {
-        return userService.getUserByBarcodeToken(barcode)
-                .map(ResponseEntity::ok)
-                   .orElseGet(() -> ResponseEntity.notFound().build());
+    @GetMapping("/barcode/{barcode}")
+    public ResponseEntity<?> getUserByBarcode(@PathVariable String barcode) {
+        Optional<User> user = userService.getUserByBarcodeToken(barcode);
+        if (user.isPresent()) {
+            return ResponseEntity.ok(new UserDTO(user.get()));
+        } else {
+            return ResponseEntity.status(404).body(Map.of("error", "User not found with barcode: " + barcode));
+        }
     }
 
 
