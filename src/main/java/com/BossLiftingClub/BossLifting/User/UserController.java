@@ -229,16 +229,13 @@ public class UserController {
         }
     }
 
-    @PostMapping("/{userId}/waiver")
-    public ResponseEntity<String> saveWaiverSignature(
-            @PathVariable Long userId,
-            @RequestBody WaiverRequest waiverRequest) {
-        try {
-            userService.saveWaiverSignature(userId, waiverRequest.getSignature());
-            return ResponseEntity.ok("Waiver signature saved successfully");
-        } catch (Exception e) {
-            return ResponseEntity.badRequest().body("Error saving waiver signature: " + e.getMessage());
-        }
+    @PostMapping("/{id}/waiver")
+    public ResponseEntity<UserDTO> saveWaiverSignature(
+            @PathVariable Long id,
+            @RequestBody Map<String, String> requestBody) throws Exception {
+        String base64Signature = requestBody.get("signature");
+        User user = userService.saveWaiverSignature(id, base64Signature);
+        return ResponseEntity.ok(new UserDTO(user));
     }
 
 }
