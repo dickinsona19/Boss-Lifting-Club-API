@@ -45,12 +45,11 @@ public class UserController {
                 return ResponseEntity.status(400).body(errorResponse);
             }
 
-            // Validate phone number and password with your service
             User user = userService.signInWithPhoneNumber(phoneNumber, password);
-            String token = jwtUtil.generateToken(phoneNumber); // Use phoneNumber as the subject
+            String token = jwtUtil.generateToken(phoneNumber);
 
             Map<String, Object> response = new HashMap<>();
-            response.put("user", user);
+            response.put("user", new UserDTO(user)); // Use DTO to control serialization
             response.put("token", token);
             return ResponseEntity.ok(response);
         } catch (Exception e) {
@@ -59,7 +58,6 @@ public class UserController {
             return ResponseEntity.status(401).body(errorResponse);
         }
     }
-
 
 
     // Get all users

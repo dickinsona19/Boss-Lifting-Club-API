@@ -50,6 +50,7 @@ public class UserServiceImpl implements UserService {
         return userRepository.existsByReferralCode(referralCode);
     }
     @Override
+    @Transactional // Not readOnly since we're modifying the entity
     public Optional<User> updateProfilePicture(Long id, byte[] profilePicture) {
         return userRepository.findById(id)
                 .map(user -> {
@@ -58,6 +59,7 @@ public class UserServiceImpl implements UserService {
                 });
     }
     @Override
+    @Transactional(readOnly = true) // readOnly = true since we're only reading
     public User signInWithPhoneNumber(String phoneNumber, String password) throws Exception {
         // Find user by phone number
         User user = userRepository.findByPhoneNumber(phoneNumber)
@@ -81,11 +83,11 @@ public class UserServiceImpl implements UserService {
         return userRepository.findById(id);
     }
     @Override
-    public User updateUserAfterPayment(String stripeCustomerId) {
+    public User updateUserAfterPayment(String stripeCustomerId, boolean standing) {
         Optional<User> optionalUser = userRepository.findByUserStripeMemberId(stripeCustomerId);
         if (optionalUser.isPresent()) {
             User user = optionalUser.get();
-            user.setIsInGoodStanding(true); // Payment succeeded
+            user.setIsInGoodStanding(standing); // Payment succeeded
             return userRepository.save(user);
         } else {
             throw new RuntimeException("User not found for Stripe customer ID: " + stripeCustomerId);
@@ -185,6 +187,7 @@ public class UserServiceImpl implements UserService {
         return user; // Return the user object on successful login
     }
     @Override
+    @Transactional // Not readOnly since we're modifying the entity
     public User saveWaiverSignature(Long userId, String base64Signature) throws Exception {
         Optional<User> userOptional = userRepository.findById(userId);
         if (userOptional.isPresent()) {
