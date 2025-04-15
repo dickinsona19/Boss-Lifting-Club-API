@@ -50,13 +50,11 @@ public class UserServiceImpl implements UserService {
         return userRepository.existsByReferralCode(referralCode);
     }
     @Override
-    @Transactional // Not readOnly since we're modifying the entity
-    public Optional<User> updateProfilePicture(Long id, byte[] profilePicture) {
-        return userRepository.findById(id)
-                .map(user -> {
-                    user.setProfilePicture(profilePicture);
-                    return userRepository.save(user); // Save without re-encoding password
-                });
+    public Optional<User> updateProfilePicture(Long id, String imageUrl) {
+        return userRepository.findById(id).map(user -> {
+            user.setProfilePictureUrl(imageUrl);
+            return userRepository.save(user);
+        });
     }
     @Override
     @Transactional(readOnly = true) // readOnly = true since we're only reading

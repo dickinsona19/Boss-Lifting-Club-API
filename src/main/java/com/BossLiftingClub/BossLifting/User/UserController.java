@@ -21,11 +21,12 @@ import java.util.Optional;
 public class UserController {
     private final BarcodeService barcodeService;
     private final UserService userService;
-
+    private final FirebaseService firebaseService;
     @Autowired
-    public UserController(UserService userService, BarcodeService barcodeService) {
+    public UserController(UserService userService, BarcodeService barcodeService, FirebaseService firebaseService) {
         this.userService = userService;
         this.barcodeService = barcodeService;
+        this.firebaseService = firebaseService;
     }
 
 
@@ -200,16 +201,35 @@ public class UserController {
             return ResponseEntity.status(500).body(Map.of("error", "Failed to create checkout session: " + e.getMessage()));
         }
     }
+    public static class ImageUrlDTO {
+        private String imageUrl;
 
+        public String getImageUrl() {
+            return imageUrl;
+        }
+
+        public void setImageUrl(String imageUrl) {
+            this.imageUrl = imageUrl;
+        }
+    }
     // Update user profile picture
     @PostMapping("/{id}/picture")
     public ResponseEntity<UserMediaDTO> updateProfilePicture(
             @PathVariable Long id,
-            @RequestParam("file") MultipartFile file) throws IOException {
-        byte[] profilePicture = file.getBytes();
-        return userService.updateProfilePicture(id, profilePicture)
-                .map(user -> ResponseEntity.ok(new UserMediaDTO(user)))
-                .orElseGet(() -> ResponseEntity.notFound().build());
+            @RequestParam("file") MultipartFile file) {
+
+        try {
+            // Upload to Firebase and get public URL
+            String imageUrl = firebaseService.uploadImage(file);
+
+            // Update user with new profile picture URL
+            return userService.updateProfilePicture(id, imageUrl)
+                    .map(user -> ResponseEntity.ok(new UserMediaDTO(user)))
+                    .orElseGet(() -> ResponseEntity.notFound().build());
+
+        } catch (IOException e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
+        }
     }
 
 

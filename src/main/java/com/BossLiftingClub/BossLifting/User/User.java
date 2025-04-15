@@ -55,10 +55,8 @@ public class User {
     @Column(name = "waiver_signed_date")
     private LocalDateTime waiverSignedDate;
 
-    @Lob
-    @Basic(fetch = FetchType.LAZY) // Explicitly set to LAZY
-    @JsonIgnore // Prevent serialization to avoid LOB access during JSON response
-    private byte[] profilePicture;
+    @Column(name="profile_picture_url")
+    private String profilePictureUrl;
 
     @Column(name = "referral_code",  unique = true)
     private String referralCode;
@@ -180,11 +178,15 @@ public class User {
     public void setUserTitles(UserTitles userTitles) {
         this.userTitles = userTitles;
     }
-    public byte[] getProfilePicture() { return profilePicture; }
-    public void setProfilePicture(byte[] profilePicture) { this.profilePicture = profilePicture; }
     public byte[] getSignatureData() { return signatureData; }
     public void setSignatureData(byte[] signatureData) { this.signatureData = signatureData; }
+    public String getProfilePictureUrl() {
+        return profilePictureUrl;
+    }
 
+    public void setProfilePictureUrl(String profilePictureUrl) {
+        this.profilePictureUrl = profilePictureUrl;
+    }
     public LocalDateTime getWaiverSignedDate() { return waiverSignedDate; }
     public void setWaiverSignedDate(LocalDateTime waiverSignedDate) { this.waiverSignedDate = waiverSignedDate; }
 
