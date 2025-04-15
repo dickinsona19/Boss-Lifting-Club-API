@@ -12,8 +12,10 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
 import javax.annotation.PostConstruct;
+import java.io.ByteArrayInputStream;
 import java.io.FileInputStream;
 import java.io.IOException;
+import java.io.InputStream;
 import java.util.UUID;
 
 @Service
@@ -21,13 +23,15 @@ public class FirebaseService {
 
     private final String bucketName = "clt-liftingclub-llc.appspot.com";
 
-    @Value("${firebase.service.account.path}")
-    private String serviceAccountPath;
+    // Fetch the service account JSON from the environment variable
+    @Value("${FIREBASE_SERVICE_ACCOUNT_JSON}")
+    private String serviceAccountJson;
 
     @PostConstruct
     public void initializeFirebase() throws IOException {
         if (FirebaseApp.getApps().isEmpty()) {
-            FileInputStream serviceAccount = new FileInputStream(serviceAccountPath);
+            // Load the service account JSON directly from the environment variable
+            InputStream serviceAccount = new ByteArrayInputStream(serviceAccountJson.getBytes());
 
             FirebaseOptions options = FirebaseOptions.builder()
                     .setCredentials(GoogleCredentials.fromStream(serviceAccount))
@@ -39,8 +43,9 @@ public class FirebaseService {
     }
 
     public String uploadImage(MultipartFile file) throws IOException {
-        String fileName = "profile_pictures/" +  "_" + UUID.randomUUID() + "-" + file.getOriginalFilename();
+        String fileName = "profile_pictures/" + UUID.randomUUID() + "-" + file.getOriginalFilename();
 
+        // Upload to Firebase Storage
         Bucket bucket = StorageClient.getInstance().bucket();
         Blob blob = bucket.create(fileName, file.getBytes(), file.getContentType());
 
