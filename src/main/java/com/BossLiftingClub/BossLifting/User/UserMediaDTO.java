@@ -9,9 +9,7 @@ public class UserMediaDTO {
     private LocalDateTime waiverSignedDate;
 
     public UserMediaDTO(User user) {
-        this.profilePicture = user.getProfilePicture() != null
-                ? Base64.getEncoder().encodeToString(user.getProfilePicture())
-                : null;
+        this.profilePicture = user.getProfilePictureUrl();
         this.signatureData = user.getSignatureData() != null
                 ? Base64.getEncoder().encodeToString(user.getSignatureData())
                 : null;

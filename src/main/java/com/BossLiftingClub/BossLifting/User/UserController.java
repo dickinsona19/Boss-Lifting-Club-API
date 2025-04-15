@@ -200,14 +200,26 @@ public class UserController {
             return ResponseEntity.status(500).body(Map.of("error", "Failed to create checkout session: " + e.getMessage()));
         }
     }
+    public static class ImageUrlDTO {
+        private String imageUrl;
 
+        public String getImageUrl() {
+            return imageUrl;
+        }
+
+        public void setImageUrl(String imageUrl) {
+            this.imageUrl = imageUrl;
+        }
+    }
     // Update user profile picture
     @PostMapping("/{id}/picture")
     public ResponseEntity<UserMediaDTO> updateProfilePicture(
             @PathVariable Long id,
-            @RequestParam("file") MultipartFile file) throws IOException {
-        byte[] profilePicture = file.getBytes();
-        return userService.updateProfilePicture(id, profilePicture)
+            @RequestBody ImageUrlDTO imageUrlDTO) {
+
+        String imageUrl = imageUrlDTO.getImageUrl();
+
+        return userService.updateProfilePicture(id, imageUrl)
                 .map(user -> ResponseEntity.ok(new UserMediaDTO(user)))
                 .orElseGet(() -> ResponseEntity.notFound().build());
     }

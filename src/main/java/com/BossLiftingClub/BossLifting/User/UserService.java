@@ -16,7 +16,7 @@ public interface UserService {
     Optional<User> deleteUserWithPhoneNumber(String PhoneNumber);
     User signIn(Map<String, String> requestBody) throws Exception;
     User signInWithPhoneNumber(String phoneNumber, String password) throws Exception;
-    Optional<User> updateProfilePicture(Long id, byte[] profilePicture);
+    Optional<User> updateProfilePicture(Long id, String profilePicture);
     User getUserByReferralCode(String referralCode);
     User saveWaiverSignature(Long userId, String base64Signature) throws Exception;
     User updateUser(User user);
