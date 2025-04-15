@@ -46,11 +46,9 @@ public class User {
     @JoinColumn(name = "user_title_id", referencedColumnName = "id")
     private UserTitles userTitles;
 
-    @Lob
+
     @Column(name = "signature_data")
-    @Basic(fetch = FetchType.LAZY) // Explicitly set to LAZY
-    @JsonIgnore // Prevent serialization to avoid LOB access during JSON response
-    private byte[] signatureData;
+    private String signatureData;
 
     @Column(name = "waiver_signed_date")
     private LocalDateTime waiverSignedDate;
@@ -178,8 +176,8 @@ public class User {
     public void setUserTitles(UserTitles userTitles) {
         this.userTitles = userTitles;
     }
-    public byte[] getSignatureData() { return signatureData; }
-    public void setSignatureData(byte[] signatureData) { this.signatureData = signatureData; }
+    public String getSignatureData() { return signatureData; }
+    public void setSignatureData(String signatureData) { this.signatureData = signatureData; }
     public String getProfilePictureUrl() {
         return profilePictureUrl;
     }

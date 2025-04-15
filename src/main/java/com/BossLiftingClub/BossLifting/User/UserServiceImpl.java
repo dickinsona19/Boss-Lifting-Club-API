@@ -38,7 +38,13 @@ public class UserServiceImpl implements UserService {
         }
         return null;
     }
-
+    @Override
+    public Optional<User> updateWaiverSignature(Long userId, String imageUrl) {
+        return userRepository.findById(userId).map(user -> {
+            user.setSignatureData(imageUrl); // assuming you have this field
+            return userRepository.save(user);
+        });
+    }
     @Override
     @Transactional
     public User updateUser(User user) {
@@ -184,23 +190,5 @@ public class UserServiceImpl implements UserService {
 
         return user; // Return the user object on successful login
     }
-    @Override
-    @Transactional // Not readOnly since we're modifying the entity
-    public User saveWaiverSignature(Long userId, String base64Signature) throws Exception {
-        Optional<User> userOptional = userRepository.findById(userId);
-        if (userOptional.isPresent()) {
-            User user = userOptional.get();
 
-            // Decode Base64 string to byte[]
-            byte[] signatureBytes = Base64.getDecoder().decode(base64Signature);
-            user.setSignatureData(signatureBytes);
-
-            // Set current date and time
-            user.setWaiverSignedDate(LocalDateTime.now());
-
-            return userRepository.save(user);
-        } else {
-            throw new Exception("User not found with ID: " + userId);
-        }
-    }
 }

@@ -31,29 +31,29 @@ public class WaiverController {
             return ResponseEntity.ok(user.getSignatureData() != null);
         }
 
-        @PostMapping(value = "/sign", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-        public ResponseEntity<String> signWaiver(
-                @RequestParam String phoneNumber,
-                @RequestParam("signature") MultipartFile signatureFile) {
-            try {
-                Optional<User> userOptional = userRepository.findByPhoneNumber(phoneNumber);
-                if (userOptional.isEmpty()) {
-                    return ResponseEntity.badRequest().body("Member not found");
-                }
-
-                User user = userOptional.get();
-                // Convert MultipartFile to byte[]
-                byte[] signatureBytes = signatureFile.getBytes();
-
-                // Update member
-                user.setSignatureData(signatureBytes);
-                user.setWaiverSignedDate(LocalDateTime.now());
-                userRepository.save(user); // Save via repository, not user object
-
-                return ResponseEntity.ok("Waiver signed successfully");
-            } catch (IOException e) {
-                return ResponseEntity.status(500).body("Failed to save signature: " + e.getMessage());
-            }
-        }
+//        @PostMapping(value = "/sign", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+//        public ResponseEntity<String> signWaiver(
+//                @RequestParam String phoneNumber,
+//                @RequestParam("signature") MultipartFile signatureFile) {
+//            try {
+//                Optional<User> userOptional = userRepository.findByPhoneNumber(phoneNumber);
+//                if (userOptional.isEmpty()) {
+//                    return ResponseEntity.badRequest().body("Member not found");
+//                }
+//
+//                User user = userOptional.get();
+//                // Convert MultipartFile to byte[]
+//                byte[] signatureBytes = signatureFile.getBytes();
+//
+//                // Update member
+//                user.setSignatureData(signatureBytes);
+//                user.setWaiverSignedDate(LocalDateTime.now());
+//                userRepository.save(user); // Save via repository, not user object
+//
+//                return ResponseEntity.ok("Waiver signed successfully");
+//            } catch (IOException e) {
+//                return ResponseEntity.status(500).body("Failed to save signature: " + e.getMessage());
+//            }
+//        }
 
 }

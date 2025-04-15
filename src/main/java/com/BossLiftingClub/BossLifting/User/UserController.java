@@ -258,10 +258,20 @@ public class UserController {
     @PostMapping("/{id}/waiver")
     public ResponseEntity<UserMediaDTO> saveWaiverSignature(
             @PathVariable Long id,
-            @RequestBody Map<String, String> requestBody) throws Exception {
-        String base64Signature = requestBody.get("signature");
-        User user = userService.saveWaiverSignature(id, base64Signature);
-        return ResponseEntity.ok(new UserMediaDTO(user));
+            @RequestParam("file") MultipartFile file) {
+
+        try {
+            // Upload to Firebase and get public URL
+            String imageUrl = firebaseService.uploadImage(file);
+
+            // Save the image URL as waiver signature for the user
+            return userService.updateWaiverSignature(id, imageUrl)
+                    .map(user -> ResponseEntity.ok(new UserMediaDTO(user)))
+                    .orElseGet(() -> ResponseEntity.notFound().build());
+
+        } catch (IOException e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
+        }
     }
 
 }
