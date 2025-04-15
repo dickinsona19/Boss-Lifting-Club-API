@@ -21,11 +21,12 @@ import java.util.Optional;
 public class UserController {
     private final BarcodeService barcodeService;
     private final UserService userService;
-
+    private final FirebaseService firebaseService;
     @Autowired
-    public UserController(UserService userService, BarcodeService barcodeService) {
+    public UserController(UserService userService, BarcodeService barcodeService, FirebaseService firebaseService) {
         this.userService = userService;
         this.barcodeService = barcodeService;
+        this.firebaseService = firebaseService;
     }
 
 
@@ -215,13 +216,20 @@ public class UserController {
     @PostMapping("/{id}/picture")
     public ResponseEntity<UserMediaDTO> updateProfilePicture(
             @PathVariable Long id,
-            @RequestBody ImageUrlDTO imageUrlDTO) {
+            @RequestParam("file") MultipartFile file) {
 
-        String imageUrl = imageUrlDTO.getImageUrl();
+        try {
+            // Upload to Firebase and get public URL
+            String imageUrl = firebaseService.uploadImage(file);
 
-        return userService.updateProfilePicture(id, imageUrl)
-                .map(user -> ResponseEntity.ok(new UserMediaDTO(user)))
-                .orElseGet(() -> ResponseEntity.notFound().build());
+            // Update user with new profile picture URL
+            return userService.updateProfilePicture(id, imageUrl)
+                    .map(user -> ResponseEntity.ok(new UserMediaDTO(user)))
+                    .orElseGet(() -> ResponseEntity.notFound().build());
+
+        } catch (IOException e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
+        }
     }
 
 
