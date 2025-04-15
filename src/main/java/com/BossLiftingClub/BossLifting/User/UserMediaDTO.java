@@ -10,9 +10,7 @@ public class UserMediaDTO {
 
     public UserMediaDTO(User user) {
         this.profilePicture = user.getProfilePictureUrl();
-        this.signatureData = user.getSignatureData() != null
-                ? Base64.getEncoder().encodeToString(user.getSignatureData())
-                : null;
+        this.signatureData = user.getSignatureData();
         this.waiverSignedDate = user.getWaiverSignedDate();
     }
 
