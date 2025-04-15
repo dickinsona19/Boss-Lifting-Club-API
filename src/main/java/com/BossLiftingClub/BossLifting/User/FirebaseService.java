@@ -13,7 +13,6 @@ import org.springframework.web.multipart.MultipartFile;
 
 import javax.annotation.PostConstruct;
 import java.io.ByteArrayInputStream;
-import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.UUID;
@@ -21,7 +20,7 @@ import java.util.UUID;
 @Service
 public class FirebaseService {
 
-    private final String bucketName = "clt-liftingclub-llc.appspot.com";
+    private final String bucketName = "clt-liftingclub-llc.firebasestorage.app";
 
     // Fetch the service account JSON from the environment variable
     @Value("${FIREBASE_SERVICE_ACCOUNT_JSON}")
@@ -45,8 +44,8 @@ public class FirebaseService {
     public String uploadImage(MultipartFile file) throws IOException {
         String fileName = "profile_pictures/" + UUID.randomUUID() + "-" + file.getOriginalFilename();
 
-        // Upload to Firebase Storage
-        Bucket bucket = StorageClient.getInstance().bucket();
+        // Explicitly specify the bucket name
+        Bucket bucket = StorageClient.getInstance().bucket(bucketName);
         Blob blob = bucket.create(fileName, file.getBytes(), file.getContentType());
 
         // Make the file public
