@@ -11,6 +11,8 @@ import com.stripe.exception.StripeException;
 import com.stripe.model.*;
 import com.stripe.model.checkout.Session;
 import com.stripe.net.Webhook;
+import com.stripe.param.PriceCreateParams;
+import com.stripe.param.ProductCreateParams;
 import com.stripe.param.SubscriptionCreateParams;
 import com.stripe.param.checkout.SessionCreateParams;
 import org.springframework.beans.factory.annotation.Value;
@@ -18,6 +20,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.math.BigDecimal;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Optional;
@@ -273,6 +276,7 @@ public class StripeController {
                         Membership membership = membershipRepository.findByName(metadata.get("membership"))
                                 .orElseThrow(() -> new RuntimeException("Founding user title not found in database"));
                         user.setMembership(membership);
+                        user.setLockedInRate(membership.getPrice());
                         user.setUserTitles(foundingUserTitle);
                         user.setUserStripeMemberId(customerId);
                         System.out.println("userLog: " + user);
@@ -280,23 +284,61 @@ public class StripeController {
                         userService.save(user);
 
                         System.out.println("User created with ID: " + user.getId() + " for customer: " + customerId);
-
-                        // Create a subscription starting April 12, 2025
+                        // Create a subscription starting April 26, 2025
                         long trialEndTimestamp = 1745625600L; // UNIX timestamp for April 26, 2025, 00:00 UTC
-                        String priceId = "price_1R6aIfGHcVHSTvgIlwN3wmyD"; // Replace with your actual $79.99/month Price ID from Stripe
-
                         SubscriptionCreateParams subscriptionParams = SubscriptionCreateParams.builder()
                                 .setCustomer(customerId)
                                 .addItem(SubscriptionCreateParams.Item.builder()
-                                        .setPrice(priceId)
+                                        .setPrice(membership.getPrice())
                                         .build())
                                 .setDefaultPaymentMethod(paymentMethodId)
                                 .setTrialEnd(trialEndTimestamp)
+                                .setApplicationFeePercent(BigDecimal.valueOf(4.0)) // 4% fee applied to every charge
+                                .setTransferData(SubscriptionCreateParams.TransferData.builder()
+                                        .setDestination("acct_1RDvRj4gikNsBARu")
+                                        .build())
                                 .build();
 
                         Subscription subscription = Subscription.create(subscriptionParams);
                         System.out.println("Subscription created with ID: " + subscription.getId() + " starting on April 12, 2025");
+                        Product maintenanceProduct = Product.create(
+                                ProductCreateParams.builder()
+                                        .setName("Maintenance Fee")
+                                        .setType(ProductCreateParams.Type.SERVICE)
+                                        .build()
+                        );
+                        PriceCreateParams maintenancePriceParams = PriceCreateParams.builder()
+                                .setCurrency("usd")
+                                .setUnitAmount(5999L)
+                                .setRecurring(
+                                        PriceCreateParams.Recurring.builder()
+                                                .setInterval(PriceCreateParams.Recurring.Interval.MONTH)
+                                                .setIntervalCount(6L) // Every 6 months
+                                                .build()
+                                )
+                                .setProduct(maintenanceProduct.getId())
+                                .build();
+                        Price maintenancePrice = Price.create(maintenancePriceParams);
+                        SubscriptionCreateParams maintenanceParams = SubscriptionCreateParams.builder()
+                                .setCustomer(customerId)
+                                .addItem(SubscriptionCreateParams.Item.builder()
+                                        .setPrice(maintenancePrice.getId())
+                                        .build())
+                                .setDefaultPaymentMethod(paymentMethodId)
+                                .setApplicationFeePercent(BigDecimal.valueOf(4.0))
+                                .setTransferData(SubscriptionCreateParams.TransferData.builder()
+                                        .setDestination("acct_1RDvRj4gikNsBARu")
+                                        .build())
+                                .setBillingCycleAnchorConfig(
+                                        SubscriptionCreateParams.BillingCycleAnchorConfig.builder()
+                                                .setDayOfMonth(1L)
+                                                .setMonth(1L) // January
+                                                .build()
+                                )
+                                .addExpand("schedule") // For debugging billing cycle
+                                .build();
 
+                        Subscription maintenanceSubscription = Subscription.create(maintenanceParams);
                     } else {
                         // No payment method provided, delete the Stripe customer
                         System.out.println("No payment method attached in setup intent: " + setupIntentId);
