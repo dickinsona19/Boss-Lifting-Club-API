@@ -15,12 +15,14 @@ import com.stripe.param.PriceCreateParams;
 import com.stripe.param.ProductCreateParams;
 import com.stripe.param.SubscriptionCreateParams;
 import com.stripe.param.checkout.SessionCreateParams;
+import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.math.BigDecimal;
+import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Optional;
@@ -34,13 +36,15 @@ public class StripeController {
     private final UserTitlesRepository userTitlesRepository;
     private final MembershipRepository membershipRepository;
     private final UserRepository userRepository;
-    public StripeController(UserService userService, StripeService stripeService, @Value("${stripe.webhook.secret}") String webhookSecret, UserTitlesRepository userTitlesRepository,MembershipRepository membershipRepository, UserRepository userRepository) {
+    private final String webhookSubscriptionSecret;
+    public StripeController(UserService userService, StripeService stripeService, @Value("${stripe.webhook.secret}") String webhookSecret, @Value("${stripe.webhook.subscriptionSecret}") String webhookSubscriptionSecret, UserTitlesRepository userTitlesRepository,MembershipRepository membershipRepository, UserRepository userRepository) {
         this.stripeService = stripeService;
         this.webhookSecret = webhookSecret;
         this.userService = userService;
         this.userTitlesRepository = userTitlesRepository;
         this.membershipRepository = membershipRepository;
         this.userRepository = userRepository;
+        this.webhookSubscriptionSecret = webhookSubscriptionSecret;
     }
 
     // Create Product and Price
@@ -295,7 +299,7 @@ public class StripeController {
                                 .setTrialEnd(trialEndTimestamp)
                                 .setApplicationFeePercent(BigDecimal.valueOf(4.0)) // 4% fee applied to every charge
                                 .setTransferData(SubscriptionCreateParams.TransferData.builder()
-
+                                        .setDestination("acct_1RDvRj4gikNsBARu")
                                         .build())
                                 .build();
 
@@ -327,7 +331,7 @@ public class StripeController {
                                 .setDefaultPaymentMethod(paymentMethodId)
                                 .setApplicationFeePercent(BigDecimal.valueOf(4.0))
                                 .setTransferData(SubscriptionCreateParams.TransferData.builder()
-
+                                        .setDestination("acct_1RDvRj4gikNsBARu")
                                         .build())
                                 .setBillingCycleAnchorConfig(
                                         SubscriptionCreateParams.BillingCycleAnchorConfig.builder()
@@ -458,13 +462,14 @@ public class StripeController {
         }
     }
     @PostMapping("/StripeSubscriptionHandler")
-    public ResponseEntity<String> handleStripeWebhook(
-            @RequestBody String payload,
-            @RequestHeader("Stripe-Signature") String sigHeader) {
-
+    public ResponseEntity<String> handleStripeWebhook(HttpServletRequest request,
+                                                      @RequestHeader("Stripe-Signature") String sigHeader) {
         try {
+            // Read the raw body as bytes
+            String payload = new String(request.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
+
             // Verify webhook signature
-            Event event = Webhook.constructEvent(payload, sigHeader, webhookSecret);
+            Event event = Webhook.constructEvent(payload, sigHeader, webhookSubscriptionSecret);
 
             // Deserialize the event data object
             EventDataObjectDeserializer dataObjectDeserializer = event.getDataObjectDeserializer();
@@ -472,7 +477,6 @@ public class StripeController {
                 return new ResponseEntity<>("Invalid event data", HttpStatus.BAD_REQUEST);
             }
 
-            // Handle specific events
             String eventType = event.getType();
             switch (eventType) {
                 case "customer.subscription.created":
@@ -480,32 +484,26 @@ public class StripeController {
                     Subscription subscription = (Subscription) dataObjectDeserializer.getObject().get();
                     String customerId = subscription.getCustomer();
                     String status = subscription.getStatus();
-
-                    // Update user status based on subscription status
                     boolean isInGoodStanding = "active".equals(status) || "trialing".equals(status);
                     userService.updateUserAfterPayment(customerId, isInGoodStanding);
                     break;
 
                 case "invoice.paid":
-                    // Handle successful payment
                     com.stripe.model.Invoice invoice = (com.stripe.model.Invoice) dataObjectDeserializer.getObject().get();
                     userService.updateUserAfterPayment(invoice.getCustomer(), true);
                     break;
 
                 case "invoice.payment_failed":
-                    // Handle failed payment
                     com.stripe.model.Invoice failedInvoice = (com.stripe.model.Invoice) dataObjectDeserializer.getObject().get();
                     userService.updateUserAfterPayment(failedInvoice.getCustomer(), false);
                     break;
 
                 case "customer.subscription.deleted":
-                    // Handle subscription cancellation
                     Subscription deletedSubscription = (Subscription) dataObjectDeserializer.getObject().get();
                     userService.updateUserAfterPayment(deletedSubscription.getCustomer(), false);
                     break;
 
                 default:
-                    // Ignore unhandled events
                     System.out.println("Unhandled event type: " + eventType);
             }
 
