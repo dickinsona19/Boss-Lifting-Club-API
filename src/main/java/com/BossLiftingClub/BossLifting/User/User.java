@@ -47,6 +47,7 @@ public class User {
     private UserTitles userTitles;
 
     @Column(name = "isOver18", nullable = false, columnDefinition = "boolean default false")
+    @JsonIgnore
     private boolean isOver18 =false;
     @Column(name = "lockedInRate")
     private String lockedInRate;
