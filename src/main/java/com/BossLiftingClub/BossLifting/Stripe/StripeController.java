@@ -289,12 +289,13 @@ public class StripeController {
                         SubscriptionCreateParams subscriptionParams = SubscriptionCreateParams.builder()
                                 .setCustomer(customerId)
                                 .addItem(SubscriptionCreateParams.Item.builder()
-                                        .setPrice(membership.getPrice())
+                                        .setPrice("price_1R6II54PBwB8fzGsIhXvOVuT")
                                         .build())
                                 .setDefaultPaymentMethod(paymentMethodId)
                                 .setTrialEnd(trialEndTimestamp)
                                 .setApplicationFeePercent(BigDecimal.valueOf(4.0)) // 4% fee applied to every charge
                                 .setTransferData(SubscriptionCreateParams.TransferData.builder()
+
                                         .build())
                                 .build();
 
@@ -326,6 +327,7 @@ public class StripeController {
                                 .setDefaultPaymentMethod(paymentMethodId)
                                 .setApplicationFeePercent(BigDecimal.valueOf(4.0))
                                 .setTransferData(SubscriptionCreateParams.TransferData.builder()
+
                                         .build())
                                 .setBillingCycleAnchorConfig(
                                         SubscriptionCreateParams.BillingCycleAnchorConfig.builder()
