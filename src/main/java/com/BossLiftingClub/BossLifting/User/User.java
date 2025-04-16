@@ -46,8 +46,8 @@ public class User {
     @JoinColumn(name = "user_title_id", referencedColumnName = "id")
     private UserTitles userTitles;
 
-    @Column(name = "isOver18")
-    private boolean isOver18;
+    @Column(name = "isOver18", nullable = false, columnDefinition = "boolean default false")
+    private boolean isOver18 =false;
     @Column(name = "lockedInRate")
     private String lockedInRate;
 
@@ -210,12 +210,12 @@ public class User {
         this.referredBy = referredBy;
     }
 
-    public boolean isOver18() {
+    public Boolean isOver18() {
         return isOver18;
     }
 
-    public void setOver18(boolean over18) {
-        isOver18 = over18;
+    public void setIsOver18(Boolean isOver18) {
+        this.isOver18 = isOver18 != null ? isOver18 : false; // Default to false if null
     }
 
     public String isLockedInRate() {
