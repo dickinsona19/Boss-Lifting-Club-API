@@ -295,7 +295,6 @@ public class StripeController {
                                 .setTrialEnd(trialEndTimestamp)
                                 .setApplicationFeePercent(BigDecimal.valueOf(4.0)) // 4% fee applied to every charge
                                 .setTransferData(SubscriptionCreateParams.TransferData.builder()
-                                        .setDestination("acct_1RDvRj4gikNsBARu")
                                         .build())
                                 .build();
 
@@ -327,7 +326,6 @@ public class StripeController {
                                 .setDefaultPaymentMethod(paymentMethodId)
                                 .setApplicationFeePercent(BigDecimal.valueOf(4.0))
                                 .setTransferData(SubscriptionCreateParams.TransferData.builder()
-                                        .setDestination("acct_1RDvRj4gikNsBARu")
                                         .build())
                                 .setBillingCycleAnchorConfig(
                                         SubscriptionCreateParams.BillingCycleAnchorConfig.builder()
