@@ -439,29 +439,6 @@ public class StripeController {
         long nextBillingDay = 1L;
         int nextBillingYear = isBeforeJuly ? currentDate.getYear() : currentDate.getYear() + 1;
 
-        // Create invoice item for the initial full charge of the previous period
-        if (!currentDate.isBefore(anchorDate)) {
-            // Immediate charge for post-April 26 signups
-            InvoiceItemCreateParams invoiceItemParams = InvoiceItemCreateParams.builder()
-                    .setCustomer(customerId)
-                    .setAmount(6689L) // $66.89 in cents ($59.99 + $4.50 tax + $2.40 fee)
-                    .setCurrency("usd")
-                    .setDescription("Maintenance Subscription + Tech Fee for period starting " + previousBillingDate)
-                    .build();
-            InvoiceItem.create(invoiceItemParams);
-            System.out.println("Created invoice item for immediate $67.07 charge for maintenance subscription period starting " + previousBillingDate);
-        } else {
-            // Charge on April 26, 2025, for pre-April 26 signups
-            InvoiceItemCreateParams invoiceItemParams = InvoiceItemCreateParams.builder()
-                    .setCustomer(customerId)
-                    .setAmount(6689L) // $66.89 in cents ($59.99 + $4.50 tax + $2.40 fee)
-                    .setCurrency("usd")
-                    .setDescription("Maintenance Subscription + Tech Fee for period starting " + previousBillingDate)
-                    .build();
-            InvoiceItem.create(invoiceItemParams);
-            System.out.println("Created invoice item for $67.07 charge on April 26, 2025, for maintenance subscription period starting " + previousBillingDate);
-        }
-
         // Create maintenance subscription with fee as a recurring item
         SubscriptionCreateParams.Builder maintenanceParamsBuilder = SubscriptionCreateParams.builder()
                 .setCustomer(customerId)
@@ -469,14 +446,14 @@ public class StripeController {
                         .setPrice("price_1RF30SGHcVHSTvgIpegCzQ0m") // $59.99
                         .build())
                 .addItem(SubscriptionCreateParams.Item.builder()
-                        .setPrice("price_1RF4yDGHcVHSTvgIbRn9gXHJ") // $2.58 fee (after update)
+                        .setPrice("price_1RF4yDGHcVHSTvgIbRn9gXHJ") // $2.58 fee
                         .build())
                 .setDefaultPaymentMethod(paymentMethodId)
                 .setProrationBehavior(SubscriptionCreateParams.ProrationBehavior.NONE)
                 .addDefaultTaxRate("txr_1RF33tGHcVHSTvgIzTwKENXt")
                 .addExpand("schedule");
 
-        // Set billing cycle anchor to the next billing date
+        // Always set the billing cycle anchor to the next billing date
         maintenanceParamsBuilder.setBillingCycleAnchorConfig(
                 SubscriptionCreateParams.BillingCycleAnchorConfig.builder()
                         .setDayOfMonth(nextBillingDay)
@@ -486,9 +463,9 @@ public class StripeController {
 
         if (currentDate.isBefore(anchorDate)) {
             maintenanceParamsBuilder.setTrialEnd(1745625600L); // Free trial until April 26, 2025
-            System.out.println("Setting maintenance subscription trial until April 26, 2025, with initial $67.07 charge via invoice item for period starting " + previousBillingDate + ", recurring billing anchored to " + nextBillingMonth + "/" + nextBillingDay + "/" + nextBillingYear);
+            System.out.println("Setting maintenance subscription trial until April 26, 2025, charging full $67.07 for period starting " + previousBillingDate + ", with billing cycle anchor to " + nextBillingMonth + "/" + nextBillingDay + "/" + nextBillingYear);
         } else {
-            System.out.println("Setting maintenance subscription with initial $67.07 charge via invoice item for period starting " + previousBillingDate + ", recurring billing anchored to " + nextBillingMonth + "/" + nextBillingDay + "/" + nextBillingYear);
+            System.out.println("Setting maintenance subscription to charge full $67.07 immediately for period starting " + previousBillingDate + ", with billing cycle anchor to " + nextBillingMonth + "/" + nextBillingDay + "/" + nextBillingYear);
         }
 
         try {
@@ -497,75 +474,6 @@ public class StripeController {
         } catch (StripeException e) {
             System.err.println("Failed to create maintenance subscription: " + e.getMessage());
             throw e;
-        }
-    }
-    @PostMapping("/api/migrate-subscriptions/{id}")
-    public ResponseEntity<String> migrateSingleUserSubscription(@PathVariable Long id) {
-        try {
-            // Retrieve the user by ID
-            Optional<User> userOptional = userService.findById(id);
-            if (!userOptional.isPresent()) {
-                String error = "User ID " + id + " not found";
-                System.err.println(error);
-                return ResponseEntity.status(404).body(error);
-            }
-
-            User user = userOptional.get();
-            boolean success = migrateSingleUser(user);
-            if (success) {
-                String response = "Successfully migrated subscriptions for user ID " + id;
-                System.out.println(response);
-                return ResponseEntity.ok(response);
-            } else {
-                String error = "Failed to migrate subscriptions for user ID " + id;
-                System.err.println(error);
-                return ResponseEntity.status(400).body(error);
-            }
-        } catch (Exception e) {
-            e.printStackTrace();
-            String error = "Migration failed for user ID " + id + ": " + e.getMessage();
-            System.err.println(error);
-            return ResponseEntity.status(500).body(error);
-        }
-    }
-
-    // Helper method to migrate subscriptions for a single user
-    private boolean migrateSingleUser(User user) {
-        String customerId = user.getUserStripeMemberId();
-        double membershipPrice = 89.99; // Fixed as per your snippet
-        if (customerId == null || customerId.isEmpty()) {
-            System.err.println("Skipping user ID " + user.getId() + ": No Stripe Customer ID");
-            return false;
-        }
-        try {
-            // Retrieve default payment method
-            Customer customer = Customer.retrieve(customerId);
-            String paymentMethodId = customer.getInvoiceSettings().getDefaultPaymentMethod();
-            if (paymentMethodId == null) {
-                System.err.println("Skipping user ID " + user.getId() + ": No default payment method for customer " + customerId);
-                return false;
-            }
-
-            // Delete existing subscriptions
-            SubscriptionCollection subscriptions = Subscription.list(
-                    SubscriptionListParams.builder()
-                            .setCustomer(customerId)
-                            .build()
-            );
-            for (Subscription sub : subscriptions.getData()) {
-                if ("active".equals(sub.getStatus()) || "trialing".equals(sub.getStatus())) {
-                    sub.cancel();
-                    System.out.println("Canceled existing subscription " + sub.getId() + " for customer " + customerId);
-                }
-            }
-
-            // Apply new subscriptions
-            createSubscriptions(customerId, paymentMethodId, membershipPrice);
-            System.out.println("Successfully migrated subscriptions for user ID " + user.getId() + ", customer " + customerId);
-            return true;
-        } catch (StripeException e) {
-            System.err.println("Failed to migrate subscriptions for user ID " + user.getId() + ", customer " + customerId + ": " + e.getMessage());
-            return false;
         }
     }
 }
