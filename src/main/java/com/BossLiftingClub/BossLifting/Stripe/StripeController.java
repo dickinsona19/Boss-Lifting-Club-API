@@ -491,28 +491,28 @@ public class StripeController {
         SubscriptionCreateParams.Builder maintenanceParamsBuilder = SubscriptionCreateParams.builder()
                 .setCustomer(customerId)
                 .addItem(SubscriptionCreateParams.Item.builder()
-                        .setPrice("price_1RF30SGHcVHSTvgIpegCzQ0m")
+                        .setPrice("price_1RF30SGHcVHSTvgIpegCzQ0m") // $59.99
                         .build())
                 .addItem(SubscriptionCreateParams.Item.builder()
-                        .setPrice("price_1RF4yDGHcVHSTvgIbRn9gXHJ") // Replace with actual fee price ID
+                        .setPrice("price_1RF4yDGHcVHSTvgIbRn9gXHJ") // $2.58 fee
                         .build())
                 .setDefaultPaymentMethod(paymentMethodId)
-                .setProrationBehavior(SubscriptionCreateParams.ProrationBehavior.NONE)
                 .addDefaultTaxRate("txr_1RF33tGHcVHSTvgIzTwKENXt")
                 .addExpand("schedule");
 
+        // Always set the billing cycle anchor to the next billing date
+        maintenanceParamsBuilder.setBillingCycleAnchorConfig(
+                SubscriptionCreateParams.BillingCycleAnchorConfig.builder()
+                        .setDayOfMonth(nextBillingDay)
+                        .setMonth(nextBillingMonth)
+                        .build()
+        );
+
         if (currentDate.isBefore(anchorDate)) {
-            maintenanceParamsBuilder
-                    .setTrialEnd(1745625600L)
-                    .setBillingCycleAnchorConfig(
-                            SubscriptionCreateParams.BillingCycleAnchorConfig.builder()
-                                    .setDayOfMonth(nextBillingDay)
-                                    .setMonth(nextBillingMonth)
-                                    .build()
-                    );
-            System.out.println("Setting maintenance subscription trial until April 26, 2025, with billing cycle anchor to " + nextBillingMonth + "/" + nextBillingDay + "/" + nextBillingYear + " (full $59.99 + tax + recurring 4% fee)");
+            maintenanceParamsBuilder.setTrialEnd(1745625600L); // Free trial until April 26, 2025
+            System.out.println("Setting maintenance subscription trial until April 26, 2025, charging full $67.07 for period starting " + previousBillingDate + ", with billing cycle anchor to " + nextBillingMonth + "/" + nextBillingDay + "/" + nextBillingYear);
         } else {
-            System.out.println("Setting maintenance subscription billing cycle anchor to " + nextBillingMonth + "/" + nextBillingDay + "/" + nextBillingYear + " (full $59.99 + tax + recurring 4% fee charged immediately, transferred via invoice.paid webhook)");
+            System.out.println("Setting maintenance subscription to charge full $67.07 immediately for period starting " + previousBillingDate + ", with billing cycle anchor to " + nextBillingMonth + "/" + nextBillingDay + "/" + nextBillingYear);
         }
 
         try {
