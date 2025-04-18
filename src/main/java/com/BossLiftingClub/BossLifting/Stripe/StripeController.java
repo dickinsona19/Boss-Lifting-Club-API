@@ -49,53 +49,6 @@ public class StripeController {
         this.webhookSubscriptionSecret = webhookSubscriptionSecret;
     }
 
-
-    @PostMapping("/fullSetupUser")
-    public ResponseEntity<Map<String, String>> createUserAndCheckout(@RequestBody UserRequest userRequest) {
-        try {
-            // Step 1: Check if phone number already exists
-            Optional<User> existingUser = userService.getUserByPhoneNumber(userRequest.getPhoneNumber());
-            if (existingUser != null) {
-                Map<String, String> errorResponse = new HashMap<>();
-                errorResponse.put("error", "PhoneNumber already in use");
-                return ResponseEntity.badRequest().body(errorResponse); // 400 Bad Request
-            }
-            User user = new User();
-            user.setFirstName(userRequest.getFirstName());
-            user.setLastName(userRequest.getLastName());
-            user.setPhoneNumber(userRequest.getPhoneNumber());
-            user.setPassword(userRequest.getPassword());
-            user.setIsInGoodStanding(false);
-            user = userService.save(user);
-
-            // 2. Create Stripe customer and link to user
-            String customerId = stripeService.createCustomer(
-                    null,
-                    userRequest.getFirstName() + " " + userRequest.getLastName(),
-                    null
-            );
-            user.setUserStripeMemberId(customerId);
-            userService.save(user);
-
-            // 3. Create Checkout session with Product IDs
-            String sessionId = stripeService.createCheckoutSession(
-                    customerId,
-                    "prod_Rq9MIEhW96cwii",    // Replace with your actual activation Product ID
-                    "prod_RqBa9OjabJeM0X", // Replace with your actual subscription Product ID
-                    "http://localhost:5173/success",
-                    "http://localhost:5173/cancel"
-            );
-
-            // 4. Return session ID
-            Map<String, String> response = new HashMap<>();
-            response.put("sessionId", sessionId);
-            return ResponseEntity.ok(response);
-
-        } catch (Exception e) {
-            e.printStackTrace();
-            return ResponseEntity.status(500).body(Map.of("error", "Failed: " + e.getMessage()));
-        }
-    }
     @PostMapping("/webhook")
     public ResponseEntity<String> handleWebhook(
             @RequestBody String payload,
@@ -478,14 +431,36 @@ public class StripeController {
             throw e;
         }
 
-        // Determine billing cycle for maintenance subscription
-        LocalDate januaryBilling = LocalDate.of(currentDate.getYear(), 1, 1);
-        LocalDate julyBilling = LocalDate.of(currentDate.getYear(), 7, 1);
-        boolean isBeforeJuly = currentDate.isBefore(julyBilling) || currentDate.equals(julyBilling);
-        LocalDate previousBillingDate = isBeforeJuly ? januaryBilling : julyBilling;
+        LocalDate currentYearJanuaryBilling = LocalDate.of(currentDate.getYear(), 1, 1);
+        LocalDate currentYearJulyBilling = LocalDate.of(currentDate.getYear(), 7, 1);
+        boolean isBeforeJuly = currentDate.isBefore(currentYearJulyBilling) || currentDate.isEqual(currentYearJulyBilling);
+        LocalDate previousBillingDate = isBeforeJuly ? currentYearJanuaryBilling : currentYearJulyBilling;
         long nextBillingMonth = isBeforeJuly ? 7L : 1L; // July 1 or January 1
         long nextBillingDay = 1L;
         int nextBillingYear = isBeforeJuly ? currentDate.getYear() : currentDate.getYear() + 1;
+
+        // Create invoice item for the initial full charge of the previous period
+        if (!currentDate.isBefore(anchorDate)) {
+            // Immediate charge for post-April 26 signups
+            InvoiceItemCreateParams invoiceItemParams = InvoiceItemCreateParams.builder()
+                    .setCustomer(customerId)
+                    .setAmount(6689L) // $66.89 in cents ($59.99 + $4.50 tax + $2.40 fee)
+                    .setCurrency("usd")
+                    .setDescription("Maintenance Subscription + Tech Fee for period starting " + previousBillingDate)
+                    .build();
+            InvoiceItem.create(invoiceItemParams);
+            System.out.println("Created invoice item for immediate $67.07 charge for maintenance subscription period starting " + previousBillingDate);
+        } else {
+            // Charge on April 26, 2025, for pre-April 26 signups
+            InvoiceItemCreateParams invoiceItemParams = InvoiceItemCreateParams.builder()
+                    .setCustomer(customerId)
+                    .setAmount(6689L) // $66.89 in cents ($59.99 + $4.50 tax + $2.40 fee)
+                    .setCurrency("usd")
+                    .setDescription("Maintenance Subscription + Tech Fee for period starting " + previousBillingDate)
+                    .build();
+            InvoiceItem.create(invoiceItemParams);
+            System.out.println("Created invoice item for $67.07 charge on April 26, 2025, for maintenance subscription period starting " + previousBillingDate);
+        }
 
         // Create maintenance subscription with fee as a recurring item
         SubscriptionCreateParams.Builder maintenanceParamsBuilder = SubscriptionCreateParams.builder()
@@ -494,13 +469,14 @@ public class StripeController {
                         .setPrice("price_1RF30SGHcVHSTvgIpegCzQ0m") // $59.99
                         .build())
                 .addItem(SubscriptionCreateParams.Item.builder()
-                        .setPrice("price_1RF4yDGHcVHSTvgIbRn9gXHJ") // $2.58 fee
+                        .setPrice("price_1RF4yDGHcVHSTvgIbRn9gXHJ") // $2.58 fee (after update)
                         .build())
                 .setDefaultPaymentMethod(paymentMethodId)
+                .setProrationBehavior(SubscriptionCreateParams.ProrationBehavior.NONE)
                 .addDefaultTaxRate("txr_1RF33tGHcVHSTvgIzTwKENXt")
                 .addExpand("schedule");
 
-        // Always set the billing cycle anchor to the next billing date
+        // Set billing cycle anchor to the next billing date
         maintenanceParamsBuilder.setBillingCycleAnchorConfig(
                 SubscriptionCreateParams.BillingCycleAnchorConfig.builder()
                         .setDayOfMonth(nextBillingDay)
@@ -510,9 +486,9 @@ public class StripeController {
 
         if (currentDate.isBefore(anchorDate)) {
             maintenanceParamsBuilder.setTrialEnd(1745625600L); // Free trial until April 26, 2025
-            System.out.println("Setting maintenance subscription trial until April 26, 2025, charging full $67.07 for period starting " + previousBillingDate + ", with billing cycle anchor to " + nextBillingMonth + "/" + nextBillingDay + "/" + nextBillingYear);
+            System.out.println("Setting maintenance subscription trial until April 26, 2025, with initial $67.07 charge via invoice item for period starting " + previousBillingDate + ", recurring billing anchored to " + nextBillingMonth + "/" + nextBillingDay + "/" + nextBillingYear);
         } else {
-            System.out.println("Setting maintenance subscription to charge full $67.07 immediately for period starting " + previousBillingDate + ", with billing cycle anchor to " + nextBillingMonth + "/" + nextBillingDay + "/" + nextBillingYear);
+            System.out.println("Setting maintenance subscription with initial $67.07 charge via invoice item for period starting " + previousBillingDate + ", recurring billing anchored to " + nextBillingMonth + "/" + nextBillingDay + "/" + nextBillingYear);
         }
 
         try {
