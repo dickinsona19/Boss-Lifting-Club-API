@@ -7,4 +7,5 @@ public interface MembershipService {
     List<Membership> getAllMemberships();
     Membership getMembershipById(Long id);
     void deleteMembership(Long id);
+    Membership updateMembershipPrice(Long id, String newPrice);
 }

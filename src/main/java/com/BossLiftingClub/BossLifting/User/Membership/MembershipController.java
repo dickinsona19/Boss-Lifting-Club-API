@@ -1,5 +1,6 @@
 package com.BossLiftingClub.BossLifting.User.Membership;
 
+import jakarta.persistence.EntityNotFoundException;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -44,4 +45,21 @@ public class MembershipController {
         }
         return new ResponseEntity<>(HttpStatus.NOT_FOUND);
     }
+    @PutMapping("/{id}/price")
+    public ResponseEntity<Membership> updateMembershipPrice(
+            @PathVariable Long id,
+            @RequestBody PriceUpdateRequest priceUpdateRequest) {
+        try {
+            Membership updatedMembership = membershipService.updateMembershipPrice(id, priceUpdateRequest.getPrice());
+            return ResponseEntity.ok(updatedMembership);
+        } catch (EntityNotFoundException e) {
+            return ResponseEntity.notFound().build();
+        }
+    }
+}
+class PriceUpdateRequest {
+    private String price;
+
+    public String getPrice() { return price; }
+    public void setPrice(String price) { this.price = price; }
 }

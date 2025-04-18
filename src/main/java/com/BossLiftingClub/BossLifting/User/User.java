@@ -46,6 +46,11 @@ public class User {
     @JoinColumn(name = "user_title_id", referencedColumnName = "id")
     private UserTitles userTitles;
 
+    @Column(name = "isOver18", nullable = false, columnDefinition = "boolean default false")
+    @JsonIgnore
+    private boolean isOver18 =false;
+    @Column(name = "lockedInRate")
+    private String lockedInRate;
 
     @Column(name = "signature_data")
     private String signatureData;
@@ -206,4 +211,19 @@ public class User {
         this.referredBy = referredBy;
     }
 
+    public Boolean isOver18() {
+        return isOver18;
+    }
+
+    public void setIsOver18(Boolean isOver18) {
+        this.isOver18 = isOver18 != null ? isOver18 : false; // Default to false if null
+    }
+
+    public String isLockedInRate() {
+        return lockedInRate;
+    }
+
+    public void setLockedInRate(String lockedInRate) {
+        this.lockedInRate = lockedInRate;
+    }
 }
