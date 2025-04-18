@@ -499,4 +499,73 @@ public class StripeController {
             throw e;
         }
     }
+    @PostMapping("/api/migrate-subscriptions/{id}")
+    public ResponseEntity<String> migrateSingleUserSubscription(@PathVariable Long id) {
+        try {
+            // Retrieve the user by ID
+            Optional<User> userOptional = userService.findById(id);
+            if (!userOptional.isPresent()) {
+                String error = "User ID " + id + " not found";
+                System.err.println(error);
+                return ResponseEntity.status(404).body(error);
+            }
+
+            User user = userOptional.get();
+            boolean success = migrateSingleUser(user);
+            if (success) {
+                String response = "Successfully migrated subscriptions for user ID " + id;
+                System.out.println(response);
+                return ResponseEntity.ok(response);
+            } else {
+                String error = "Failed to migrate subscriptions for user ID " + id;
+                System.err.println(error);
+                return ResponseEntity.status(400).body(error);
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+            String error = "Migration failed for user ID " + id + ": " + e.getMessage();
+            System.err.println(error);
+            return ResponseEntity.status(500).body(error);
+        }
+    }
+
+    // Helper method to migrate subscriptions for a single user
+    private boolean migrateSingleUser(User user) {
+        String customerId = user.getUserStripeMemberId();
+        double membershipPrice = 89.99; // Fixed as per your snippet
+        if (customerId == null || customerId.isEmpty()) {
+            System.err.println("Skipping user ID " + user.getId() + ": No Stripe Customer ID");
+            return false;
+        }
+        try {
+            // Retrieve default payment method
+            Customer customer = Customer.retrieve(customerId);
+            String paymentMethodId = customer.getInvoiceSettings().getDefaultPaymentMethod();
+            if (paymentMethodId == null) {
+                System.err.println("Skipping user ID " + user.getId() + ": No default payment method for customer " + customerId);
+                return false;
+            }
+
+            // Delete existing subscriptions
+            SubscriptionCollection subscriptions = Subscription.list(
+                    SubscriptionListParams.builder()
+                            .setCustomer(customerId)
+                            .build()
+            );
+            for (Subscription sub : subscriptions.getData()) {
+                if ("active".equals(sub.getStatus()) || "trialing".equals(sub.getStatus())) {
+                    sub.cancel();
+                    System.out.println("Canceled existing subscription " + sub.getId() + " for customer " + customerId);
+                }
+            }
+
+            // Apply new subscriptions
+            createSubscriptions(customerId, paymentMethodId, membershipPrice);
+            System.out.println("Successfully migrated subscriptions for user ID " + user.getId() + ", customer " + customerId);
+            return true;
+        } catch (StripeException e) {
+            System.err.println("Failed to migrate subscriptions for user ID " + user.getId() + ", customer " + customerId + ": " + e.getMessage());
+            return false;
+        }
+    }
 }
