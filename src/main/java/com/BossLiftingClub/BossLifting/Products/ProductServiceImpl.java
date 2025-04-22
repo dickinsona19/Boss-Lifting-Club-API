@@ -3,8 +3,8 @@ package com.BossLiftingClub.BossLifting.Products;
 import com.google.api.client.util.Value;
 import com.stripe.Stripe;
 import com.stripe.exception.StripeException;
-import com.stripe.model.Price;
-import com.stripe.model.Product;
+import com.stripe.model.Invoice;
+import com.stripe.model.InvoiceItem;
 import org.springframework.stereotype.Service;
 
 import java.util.HashMap;
@@ -31,29 +31,7 @@ public class ProductServiceImpl implements ProductService {
 
     @Override
     public Products addProduct(Products product) {
-        try {
-            // Create product in Stripe
-            Map<String, Object> productParams = new HashMap<>();
-            productParams.put("name", product.getName());
-            productParams.put("description", product.getDefinition());
-
-            Product stripeProduct = Product.create(productParams);
-
-            // Create a Price for the product
-            Map<String, Object> priceParams = new HashMap<>();
-            priceParams.put("unit_amount", (long)(product.getPrice() * 100)); // Convert to cents
-            priceParams.put("currency", "usd");
-            priceParams.put("product", stripeProduct.getId());
-
-            Price stripePrice = Price.create(priceParams);
-
-            product.setStripeProductId(stripeProduct.getId());
-
-            return productRepository.save(product);
-
-        } catch (StripeException e) {
-            throw new RuntimeException("Stripe error: " + e.getMessage());
-        }
+        return productRepository.save(product); // Just save to DB
     }
 
     @Override
@@ -73,18 +51,35 @@ public class ProductServiceImpl implements ProductService {
         Products product = productRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException("Product not found"));
 
-        try {
-            com.stripe.model.Product stripeProduct = com.stripe.model.Product.retrieve(product.getStripeProductId());
+        productRepository.deleteById(id);
+    }
 
-            // Instead of deleting, set `active` to false (archive it)
-            Map<String, Object> params = new HashMap<>();
-            params.put("active", false);
-            stripeProduct.update(params);
+    public String createInvoiceForUser(Long productId, String stripeCustomerId, int quantity) {
+        Products product = productRepository.findById(productId)
+                .orElseThrow(() -> new RuntimeException("Product not found"));
+
+        try {
+            // Create invoice item
+            Map<String, Object> invoiceItemParams = new HashMap<>();
+            invoiceItemParams.put("customer", stripeCustomerId);
+            invoiceItemParams.put("amount", (long) (product.getPrice() * 100) * quantity); // cents
+            invoiceItemParams.put("currency", "usd");
+            invoiceItemParams.put("description", product.getName());
+
+            InvoiceItem.create(invoiceItemParams);
+
+            // Create invoice
+            Map<String, Object> invoiceParams = new HashMap<>();
+            invoiceParams.put("customer", stripeCustomerId);
+            invoiceParams.put("collection_method", "charge_automatically");
+
+            Invoice invoice = Invoice.create(invoiceParams);
+            invoice.finalizeInvoice();
+
+            return invoice.getHostedInvoiceUrl(); // or invoice.getId() if you prefer
 
         } catch (StripeException e) {
-            throw new RuntimeException("Failed to archive product in Stripe: " + e.getMessage());
+            throw new RuntimeException("Stripe invoice error: " + e.getMessage());
         }
-
-        productRepository.deleteById(id);
     }
 }

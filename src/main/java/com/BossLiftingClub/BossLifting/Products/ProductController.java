@@ -36,4 +36,12 @@ public class ProductController {
         productService.deleteProduct(id);
         return ResponseEntity.noContent().build();
     }
+    @PostMapping("/purchaseProduct")
+    public String purchaseProduct(
+            @RequestParam Long productId,
+            @RequestParam String stripeCustomerId,
+            @RequestParam(defaultValue = "1") int quantity
+    ) {
+        return productService.createInvoiceForUser(productId, stripeCustomerId, quantity);
+    }
 }
