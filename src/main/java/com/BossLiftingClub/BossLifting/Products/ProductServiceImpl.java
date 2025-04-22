@@ -75,9 +75,14 @@ public class ProductServiceImpl implements ProductService {
 
         try {
             com.stripe.model.Product stripeProduct = com.stripe.model.Product.retrieve(product.getStripeProductId());
-            stripeProduct.delete();
+
+            // Instead of deleting, set `active` to false (archive it)
+            Map<String, Object> params = new HashMap<>();
+            params.put("active", false);
+            stripeProduct.update(params);
+
         } catch (StripeException e) {
-            throw new RuntimeException("Failed to delete product from Stripe: " + e.getMessage());
+            throw new RuntimeException("Failed to archive product in Stripe: " + e.getMessage());
         }
 
         productRepository.deleteById(id);
