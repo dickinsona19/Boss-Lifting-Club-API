@@ -59,27 +59,46 @@ public class ProductServiceImpl implements ProductService {
                 .orElseThrow(() -> new RuntimeException("Product not found"));
 
         try {
-            // Create invoice item
+            long unitAmount = (long) (product.getPrice() * 100);
+            long totalAmount = unitAmount * quantity;
+
+            String taxRateId = "txr_123456789"; // your Stripe tax rate ID
+
+            // Step 1: Create invoice item (under platform account)
             Map<String, Object> invoiceItemParams = new HashMap<>();
             invoiceItemParams.put("customer", stripeCustomerId);
-            invoiceItemParams.put("amount", (long) (product.getPrice() * 100) * quantity); // cents
+            invoiceItemParams.put("amount", totalAmount);
             invoiceItemParams.put("currency", "usd");
             invoiceItemParams.put("description", product.getName());
+            invoiceItemParams.put("tax_rates", List.of(taxRateId));
 
-            InvoiceItem.create(invoiceItemParams);
+            InvoiceItem invoiceItem = InvoiceItem.create(invoiceItemParams);
 
-            // Create invoice
+            // Step 2: Create the invoice (platform account)
             Map<String, Object> invoiceParams = new HashMap<>();
             invoiceParams.put("customer", stripeCustomerId);
             invoiceParams.put("collection_method", "charge_automatically");
 
             Invoice invoice = Invoice.create(invoiceParams);
-            invoice.finalizeInvoice();
+            invoice = invoice.finalizeInvoice();
 
-            return invoice.getHostedInvoiceUrl(); // or invoice.getId() if you prefer
+            // Step 3: Wait until invoice is paid, then transfer 4% to connected account
+            // ⚠️ You should listen to the `invoice.paid` webhook and do this after payment
+            long feeAmount = (long) (totalAmount * 0.04);
+
+            Map<String, Object> transferParams = new HashMap<>();
+            transferParams.put("amount", feeAmount);
+            transferParams.put("currency", "usd");
+            transferParams.put("destination", "acct_1RDvRj4gikNsBARu");
+            transferParams.put("transfer_group", invoice.getId());
+
+            // ⚠️ You should only create this after confirming payment
+            // Transfer.create(transferParams);
+
+            return invoice.getHostedInvoiceUrl();
 
         } catch (StripeException e) {
-            throw new RuntimeException("Stripe invoice error: " + e.getMessage());
+            throw new RuntimeException("Stripe error: " + e.getMessage());
         }
     }
 }

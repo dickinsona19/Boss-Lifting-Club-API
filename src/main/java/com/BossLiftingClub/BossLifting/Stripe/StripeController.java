@@ -324,6 +324,23 @@ public class StripeController {
                         System.out.println("Transferred 4% fee of " + (feeCents / 100.0) + " to Connected Account for invoice " + invoice.getId());
                     }
                 }
+                if (event.getType().equals("invoice.paid")) {
+                    Invoice invoice2 = (Invoice) event.getDataObjectDeserializer().getObject().get();
+
+                    // get the total from the invoice and calculate 4%
+                    long totalAmount = invoice2.getAmountPaid();
+                    long fee = (long)(totalAmount * 0.04);
+
+                    // transfer 4% to connected account
+                    Map<String, Object> transferParams = Map.of(
+                            "amount", fee,
+                            "currency", "usd",
+                            "destination","acct_1RDvRj4gikNsBARu" ,
+                            "transfer_group", invoice2.getId()
+                    );
+
+                    Transfer.create(transferParams);
+                }
             }
             switch (eventType) {
                 case "customer.subscription.created":
@@ -333,11 +350,6 @@ public class StripeController {
                     String status = subscription.getStatus();
                     boolean isInGoodStanding = "active".equals(status) || "trialing".equals(status);
                     userService.updateUserAfterPayment(customerId, isInGoodStanding);
-                    break;
-
-                case "invoice.paid":
-                    com.stripe.model.Invoice invoice = (com.stripe.model.Invoice) dataObjectDeserializer.getObject().get();
-                    userService.updateUserAfterPayment(invoice.getCustomer(), true);
                     break;
 
                 case "invoice.payment_failed":
