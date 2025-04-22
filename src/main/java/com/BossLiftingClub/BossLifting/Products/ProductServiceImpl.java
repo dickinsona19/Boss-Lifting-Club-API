@@ -3,8 +3,8 @@ package com.BossLiftingClub.BossLifting.Products;
 import com.google.api.client.util.Value;
 import com.stripe.Stripe;
 import com.stripe.exception.StripeException;
-import com.stripe.model.Price;
-import com.stripe.model.Product;
+import com.stripe.model.Invoice;
+import com.stripe.model.InvoiceItem;
 import org.springframework.stereotype.Service;
 
 import java.util.HashMap;
@@ -31,29 +31,7 @@ public class ProductServiceImpl implements ProductService {
 
     @Override
     public Products addProduct(Products product) {
-        try {
-            // Create product in Stripe
-            Map<String, Object> productParams = new HashMap<>();
-            productParams.put("name", product.getName());
-            productParams.put("description", product.getDefinition());
-
-            Product stripeProduct = Product.create(productParams);
-
-            // Create a Price for the product
-            Map<String, Object> priceParams = new HashMap<>();
-            priceParams.put("unit_amount", (long)(product.getPrice() * 100)); // Convert to cents
-            priceParams.put("currency", "usd");
-            priceParams.put("product", stripeProduct.getId());
-
-            Price stripePrice = Price.create(priceParams);
-
-            product.setStripeProductId(stripeProduct.getId());
-
-            return productRepository.save(product);
-
-        } catch (StripeException e) {
-            throw new RuntimeException("Stripe error: " + e.getMessage());
-        }
+        return productRepository.save(product); // Just save to DB
     }
 
     @Override
@@ -73,13 +51,54 @@ public class ProductServiceImpl implements ProductService {
         Products product = productRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException("Product not found"));
 
-        try {
-            com.stripe.model.Product stripeProduct = com.stripe.model.Product.retrieve(product.getStripeProductId());
-            stripeProduct.delete();
-        } catch (StripeException e) {
-            throw new RuntimeException("Failed to delete product from Stripe: " + e.getMessage());
-        }
-
         productRepository.deleteById(id);
+    }
+
+    public String createInvoiceForUser(Long productId, String stripeCustomerId, int quantity) {
+        Products product = productRepository.findById(productId)
+                .orElseThrow(() -> new RuntimeException("Product not found"));
+
+        try {
+            long unitAmount = (long) (product.getPrice() * 100);
+            long totalAmount = unitAmount * quantity;
+
+            String taxRateId = "txr_123456789"; // your Stripe tax rate ID
+
+            // Step 1: Create invoice item (under platform account)
+            Map<String, Object> invoiceItemParams = new HashMap<>();
+            invoiceItemParams.put("customer", stripeCustomerId);
+            invoiceItemParams.put("amount", totalAmount);
+            invoiceItemParams.put("currency", "usd");
+            invoiceItemParams.put("description", product.getName());
+            invoiceItemParams.put("tax_rates", List.of(taxRateId));
+
+            InvoiceItem invoiceItem = InvoiceItem.create(invoiceItemParams);
+
+            // Step 2: Create the invoice (platform account)
+            Map<String, Object> invoiceParams = new HashMap<>();
+            invoiceParams.put("customer", stripeCustomerId);
+            invoiceParams.put("collection_method", "charge_automatically");
+
+            Invoice invoice = Invoice.create(invoiceParams);
+            invoice = invoice.finalizeInvoice();
+
+            // Step 3: Wait until invoice is paid, then transfer 4% to connected account
+            // ⚠️ You should listen to the `invoice.paid` webhook and do this after payment
+            long feeAmount = (long) (totalAmount * 0.04);
+
+            Map<String, Object> transferParams = new HashMap<>();
+            transferParams.put("amount", feeAmount);
+            transferParams.put("currency", "usd");
+            transferParams.put("destination", "acct_1RDvRj4gikNsBARu");
+            transferParams.put("transfer_group", invoice.getId());
+
+            // ⚠️ You should only create this after confirming payment
+            // Transfer.create(transferParams);
+
+            return invoice.getHostedInvoiceUrl();
+
+        } catch (StripeException e) {
+            throw new RuntimeException("Stripe error: " + e.getMessage());
+        }
     }
 }
