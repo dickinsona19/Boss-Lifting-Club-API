@@ -354,7 +354,9 @@ public class StripeController {
 
                 case "invoice.payment_failed":
                     com.stripe.model.Invoice failedInvoice = (com.stripe.model.Invoice) dataObjectDeserializer.getObject().get();
-                    userService.updateUserAfterPayment(failedInvoice.getCustomer(), false);
+                    if (failedInvoice != null && failedInvoice.getSubscription() != null) {
+                        userService.updateUserAfterPayment(failedInvoice.getCustomer(), false);
+                    }
                     break;
 
                 case "customer.subscription.deleted":

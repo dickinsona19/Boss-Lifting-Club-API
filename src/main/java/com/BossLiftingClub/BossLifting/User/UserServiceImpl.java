@@ -190,5 +190,13 @@ public class UserServiceImpl implements UserService {
 
         return user; // Return the user object on successful login
     }
+    @Override
+    @Transactional
+    public User updateUserOver18(long userId) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new IllegalArgumentException("User not found with ID: " + userId));
+        user.setIsOver18(true);
+        return userRepository.save(user);
+    }
 
 }

@@ -28,7 +28,15 @@ public class UserController {
         this.barcodeService = barcodeService;
         this.firebaseService = firebaseService;
     }
-
+    @PutMapping("/{userId}/over18")
+    public ResponseEntity<User> updateUserOver18(@PathVariable long userId) {
+        try {
+            User updatedUser = userService.updateUserOver18(userId);
+            return ResponseEntity.ok(updatedUser);
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.notFound().build();
+        }
+    }
 
     @Autowired
     private JwtUtil jwtUtil;
