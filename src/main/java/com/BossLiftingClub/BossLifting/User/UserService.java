@@ -18,9 +18,9 @@ public interface UserService {
     User signInWithPhoneNumber(String phoneNumber, String password) throws Exception;
     Optional<User> updateProfilePicture(Long id, String profilePicture);
     User getUserByReferralCode(String referralCode);
-
     User updateUser(User user);
     boolean existsByReferralCode(String referralCode);
     Optional<User> updateWaiverSignature(Long userId, String imageUrl);
     boolean updateReferralCode(String referralCode, String newReferralCode);
+    User updateUserOver18(long userId);
 }
