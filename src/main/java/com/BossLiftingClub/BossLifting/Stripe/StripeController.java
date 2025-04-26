@@ -1,6 +1,8 @@
 package com.BossLiftingClub.BossLifting.Stripe;
 
+import com.BossLiftingClub.BossLifting.Stripe.ProcessedEvent.EventService;
 import com.BossLiftingClub.BossLifting.Stripe.RequestsAndResponses.*;
+import com.BossLiftingClub.BossLifting.Stripe.Transfers.TransferService;
 import com.BossLiftingClub.BossLifting.User.*;
 import com.BossLiftingClub.BossLifting.User.Membership.Membership;
 import com.BossLiftingClub.BossLifting.User.Membership.MembershipRepository;
@@ -39,7 +41,10 @@ public class StripeController {
     private final MembershipRepository membershipRepository;
     private final UserRepository userRepository;
     private final String webhookSubscriptionSecret;
-    public StripeController(UserService userService, StripeService stripeService, @Value("${stripe.webhook.secret}") String webhookSecret, @Value("${stripe.webhook.subscriptionSecret}") String webhookSubscriptionSecret, UserTitlesRepository userTitlesRepository,MembershipRepository membershipRepository, UserRepository userRepository) {
+    private final EventService eventService;
+    private final TransferService transferService;
+    public StripeController(EventService eventService, TransferService transferService, UserService userService, StripeService stripeService, @Value("${stripe.webhook.secret}") String webhookSecret, @Value("${stripe.webhook.subscriptionSecret}") String webhookSubscriptionSecret, UserTitlesRepository userTitlesRepository, MembershipRepository membershipRepository, UserRepository userRepository) {
+        this.eventService = eventService;
         this.stripeService = stripeService;
         this.webhookSecret = webhookSecret;
         this.userService = userService;
@@ -47,6 +52,7 @@ public class StripeController {
         this.membershipRepository = membershipRepository;
         this.userRepository = userRepository;
         this.webhookSubscriptionSecret = webhookSubscriptionSecret;
+        this.transferService = transferService;
     }
 
     @PostMapping("/webhook")
@@ -265,6 +271,7 @@ public class StripeController {
         }
     }
 
+
     @PostMapping("/StripeSubscriptionHandler")
     public ResponseEntity<String> handleStripeWebhook(HttpServletRequest request,
                                                       @RequestHeader("Stripe-Signature") String sigHeader) {
@@ -281,50 +288,67 @@ public class StripeController {
                 return new ResponseEntity<>("Invalid event data", HttpStatus.BAD_REQUEST);
             }
 
+            String eventId = event.getId();
             String eventType = event.getType();
 
+            // Check if event was already processed
+            if (eventService.isEventProcessed(eventId)) {
+                System.out.println("Event " + eventId + " already processed, skipping.");
+                return new ResponseEntity<>("Event already processed", HttpStatus.OK);
+            }
+
             // Handle invoice.paid (transfer 4% fee to Connected Account)
-            if ("invoice.paid".equals(event.getType())) {
-                Invoice invoice = (Invoice) event.getDataObjectDeserializer().getObject().orElse(null);
-                if (invoice != null && invoice.getSubscription() != null) {
-                    // Determine the 4% fee based on subscription price (from metadata or Price IDs)
-                    Subscription subscription = Subscription.retrieve(invoice.getSubscription());
-                    long feeCents = 0;
-                    for (SubscriptionItem item : subscription.getItems().getData()) {
-                        Price price = item.getPrice();
-                        String priceId = price.getId();
-                        // Map Price IDs to fee amounts (must match fee Price IDs)
-                        switch (priceId) {
-                            case "price_1R6aIfGHcVHSTvgIlwN3wmyD":
-                            case "price_1RF4FpGHcVHSTvgIKM8Jilwl":
-                                feeCents = 360; // $3.60 for $89.99 main
-                                break;
-                            case "price_1RF313GHcVHSTvgI4HXgjwOA":
-                            case "price_1RF4GlGHcVHSTvgIVojlVrn7":
-                                feeCents = 400; // $4.00 for $99.99 main
-                                break;
-                            case "price_1RF31hGHcVHSTvgIbTnGo4vT":
-                            case "price_1RF4IsGHcVHSTvgIYOoYfxb9":
-                                feeCents = 440; // $4.40 for $109.99 main
-                                break;
-                            case "price_1RF30SGHcVHSTvgIpegCzQ0m":
-                            case "price_1RF4yDGHcVHSTvgIbRn9gXHJ":
-                                feeCents = 240; // $2.40 for $59.99 maintenance
-                                break;
-                        }
+            if ("invoice.paid".equals(eventType)) {
+                Invoice invoice = (Invoice) dataObjectDeserializer.getObject().orElse(null);
+                if (invoice != null && invoice.getSubscription() != null && invoice.getCharge() != null) {
+                    String chargeId = invoice.getCharge();
+                    // Check if a transfer already exists for this charge
+                    if (transferService.hasProcessedCharge(chargeId)) {
+                        System.out.println("Transfer already exists for charge " + chargeId + ", skipping.");
+                        return new ResponseEntity<>("Webhook processed", HttpStatus.OK);
                     }
-                    if (feeCents > 0) {
-                        TransferCreateParams transferParams = TransferCreateParams.builder()
-                                .setAmount(feeCents)
-                                .setCurrency("usd")
-                                .setDestination("acct_1RDvRj4gikNsBARu")
-                                .setSourceTransaction(invoice.getCharge())
-                                .build();
-                        Transfer.create(transferParams);
-                        System.out.println("Transferred 4% fee of " + (feeCents / 100.0) + " to Connected Account for invoice " + invoice.getId());
+
+                    Charge charge = Charge.retrieve(chargeId);
+                    if (charge != null && "succeeded".equals(charge.getStatus())) {
+                        Subscription subscription = Subscription.retrieve(invoice.getSubscription());
+                        long feeCents = calculateFeeCents(subscription);
+                        if (feeCents > 0) {
+                            try {
+                                // Check available balance before transfer
+                                Balance balance = Balance.retrieve();
+                                long availableBalance = balance.getAvailable().stream()
+                                        .filter(b -> "usd".equals(b.getCurrency()))
+                                        .mapToLong(Balance.Available::getAmount)
+                                        .sum();
+                                if (availableBalance < feeCents) {
+                                    System.err.println("Insufficient balance: " + (availableBalance / 100.0) + " USD, needed: " + (feeCents / 100.0));
+                                    return new ResponseEntity<>("Insufficient balance", HttpStatus.INTERNAL_SERVER_ERROR);
+                                }
+
+                                TransferCreateParams transferParams = TransferCreateParams.builder()
+                                        .setAmount(feeCents)
+                                        .setCurrency("usd")
+                                        .setDestination("acct_1RDvRj4gikNsBARu")
+                                        .setSourceTransaction(chargeId)
+                                        .build();
+                                Transfer transfer = Transfer.create(transferParams);
+                                System.out.println("Transferred " + (feeCents / 100.0) + " to Connected Account for invoice " + invoice.getId());
+                                // Store transfer record
+                                transferService.saveTransfer(chargeId, invoice.getId(), transfer.getId());
+                            } catch (StripeException e) {
+                                System.err.println("Transfer failed for invoice " + invoice.getId() + ": " + e.getMessage());
+                                return new ResponseEntity<>("Transfer error: " + e.getMessage(), HttpStatus.INTERNAL_SERVER_ERROR);
+                            }
+                        }
+                        // Update user status
+                        userService.updateUserAfterPayment(invoice.getCustomer(), true);
+                    } else {
+                        System.out.println("Charge was not successful. Skipping fee transfer for invoice " + invoice.getId());
                     }
                 }
             }
+
+            // Handle other event types
             switch (eventType) {
                 case "customer.subscription.created":
                 case "customer.subscription.updated":
@@ -335,13 +359,8 @@ public class StripeController {
                     userService.updateUserAfterPayment(customerId, isInGoodStanding);
                     break;
 
-                case "invoice.paid":
-                    com.stripe.model.Invoice invoice = (com.stripe.model.Invoice) dataObjectDeserializer.getObject().get();
-                    userService.updateUserAfterPayment(invoice.getCustomer(), true);
-                    break;
-
                 case "invoice.payment_failed":
-                    com.stripe.model.Invoice failedInvoice = (com.stripe.model.Invoice) dataObjectDeserializer.getObject().get();
+                    Invoice failedInvoice = (Invoice) dataObjectDeserializer.getObject().get();
                     if (failedInvoice != null && failedInvoice.getSubscription() != null) {
                         userService.updateUserAfterPayment(failedInvoice.getCustomer(), false);
                     }
@@ -353,15 +372,51 @@ public class StripeController {
                     break;
 
                 default:
-                    System.out.println("Unhandled event type: " + eventType);
+                    System.out.println("Unhandled event type: " + eventType + ", ID: " + eventId);
             }
 
+            // Mark event as processed
+            eventService.markEventProcessed(eventId);
             return new ResponseEntity<>("Webhook processed", HttpStatus.OK);
         } catch (SignatureVerificationException e) {
             return new ResponseEntity<>("Invalid signature", HttpStatus.BAD_REQUEST);
+        } catch (StripeException e) {
+            System.err.println("Stripe API error: " + e.getMessage());
+            return new ResponseEntity<>("Stripe error: " + e.getMessage(), HttpStatus.INTERNAL_SERVER_ERROR);
         } catch (Exception e) {
+            System.err.println("Unexpected error: " + e.getMessage());
             return new ResponseEntity<>("Webhook error: " + e.getMessage(), HttpStatus.INTERNAL_SERVER_ERROR);
         }
+    }
+
+    private long calculateFeeCents(Subscription subscription) {
+        long feeCents = 0;
+        for (SubscriptionItem item : subscription.getItems().getData()) {
+            Price price = item.getPrice();
+            String priceId = price.getId();
+            System.out.println("Processing priceId: " + priceId);
+            switch (priceId) {
+                case "price_1R6aIfGHcVHSTvgIlwN3wmyD":
+                case "price_1RF4FpGHcVHSTvgIKM8Jilwl":
+                    feeCents = 360;
+                    break;
+                case "price_1RF313GHcVHSTvgI4HXgjwOA":
+                case "price_1RF4GlGHcVHSTvgIVojlVrn7":
+                    feeCents = 400;
+                    break;
+                case "price_1RF31hGHcVHSTvgIbTnGo4vT":
+                case "price_1RF4IsGHcVHSTvgIYOoYfxb9":
+                    feeCents = 440;
+                    break;
+                case "price_1RF30SGHcVHSTvgIpegCzQ0m":
+                case "price_1RF4yDGHcVHSTvgIbRn9gXHJ":
+                    feeCents = 240;
+                    break;
+                default:
+                    System.out.println("Unknown priceId: " + priceId);
+            }
+        }
+        return feeCents;
     }
     private void createSubscriptions(String customerId, String paymentMethodId, double membershipPrice) throws StripeException {
         // Determine billing cycle anchor for main subscription based on current date
