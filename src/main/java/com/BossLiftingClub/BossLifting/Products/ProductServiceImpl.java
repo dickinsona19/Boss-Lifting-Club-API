@@ -58,7 +58,7 @@ public class ProductServiceImpl implements ProductService {
 
         productRepository.deleteById(id);
     }
-
+    @Override
     public String createInvoiceForUser(Long productId, String stripeCustomerId, int quantity) {
         Products product = productRepository.findById(productId)
                 .orElseThrow(() -> new RuntimeException("Product not found"));
