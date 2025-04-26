@@ -79,12 +79,13 @@ public class ProductServiceImpl implements ProductService {
             if (defaultPaymentMethodId == null) {
                 throw new RuntimeException("Customer has no default payment method: " + stripeCustomerId + ". Please add a payment method.");
             }
-            // Verify payment method is valid
+            // Verify payment method
             PaymentMethod paymentMethod = PaymentMethod.retrieve(defaultPaymentMethodId);
             if (!"card".equals(paymentMethod.getType()) || paymentMethod.getCard() == null) {
-                throw new RuntimeException("Invalid default payment method for customer: " + stripeCustomerId);
+                throw new RuntimeException("Invalid default payment method for customer: " + stripeCustomerId + ", type: " + paymentMethod.getType());
             }
-            System.out.println("Customer " + stripeCustomerId + " has valid default payment method: " + defaultPaymentMethodId);
+            System.out.println("Customer " + stripeCustomerId + " has valid default payment method: " + defaultPaymentMethodId +
+                    ", card: " + paymentMethod.getCard().getLast4());
 
             long unitAmountCents = (long) (product.getPrice() * 100); // Convert price to cents
             long totalAmountCents = unitAmountCents * quantity; // Total pre-tax amount in cents for reference
@@ -104,10 +105,11 @@ public class ProductServiceImpl implements ProductService {
                     ", unit_amount: " + (unitAmountCents / 100.0) +
                     ", total pre-tax: " + (totalAmountCents / 100.0) + " USD");
 
-            // 1️⃣ Create invoice
+            // 1️⃣ Create invoice with explicit payment method
             InvoiceCreateParams invoiceParams = InvoiceCreateParams.builder()
                     .setCustomer(stripeCustomerId)
                     .setCollectionMethod(InvoiceCreateParams.CollectionMethod.CHARGE_AUTOMATICALLY)
+                    .setDefaultPaymentMethod(defaultPaymentMethodId) // Explicitly set payment method
                     .setAutoAdvance(true) // Attempts to finalize and pay automatically
                     .build();
             Invoice invoice = Invoice.create(invoiceParams);
@@ -134,7 +136,8 @@ public class ProductServiceImpl implements ProductService {
             invoice = invoice.finalizeInvoice();
             System.out.println("Finalized Invoice with ID: " + invoice.getId() +
                     ", status: " + invoice.getStatus() +
-                    ", amount_due: " + (invoice.getAmountDue() / 100.0));
+                    ", amount_due: " + (invoice.getAmountDue() / 100.0) +
+                    ", payment_intent: " + invoice.getPaymentIntent());
 
             if (invoice.getAmountDue() <= 0) {
                 throw new RuntimeException("Invoice has no amount due: check invoice items or payment method. " +
@@ -145,26 +148,32 @@ public class ProductServiceImpl implements ProductService {
             // 4️⃣ Handle open invoice (attempt payment if not paid)
             if ("open".equals(invoice.getStatus()) && invoice.getPaymentIntent() != null) {
                 System.out.println("Invoice is open, attempting to pay with payment intent: " + invoice.getPaymentIntent());
-                PaymentIntent paymentIntent = PaymentIntent.retrieve(invoice.getPaymentIntent());
-                if (!"succeeded".equals(paymentIntent.getStatus())) {
-                    PaymentIntentConfirmParams confirmParams = PaymentIntentConfirmParams.builder()
-                            .setPaymentMethod(defaultPaymentMethodId)
-                            .build();
-                    paymentIntent = paymentIntent.confirm(confirmParams);
-                    System.out.println("Payment intent confirmed, status: " + paymentIntent.getStatus());
+                try {
+                    PaymentIntent paymentIntent = PaymentIntent.retrieve(invoice.getPaymentIntent());
+                    if (!"succeeded".equals(paymentIntent.getStatus())) {
+                        PaymentIntentConfirmParams confirmParams = PaymentIntentConfirmParams.builder()
+                                .setPaymentMethod(defaultPaymentMethodId)
+                                .build();
+                        paymentIntent = paymentIntent.confirm(confirmParams);
+                        System.out.println("Payment intent confirmed, status: " + paymentIntent.getStatus());
+                    }
+                    // Refresh invoice to check payment status
+                    invoice = Invoice.retrieve(invoice.getId());
+                    System.out.println("Refreshed Invoice with ID: " + invoice.getId() +
+                            ", status: " + invoice.getStatus() +
+                            ", charge: " + invoice.getCharge());
+                } catch (StripeException e) {
+                    System.out.println("Payment intent confirmation failed: " + e.getMessage() + "; request-id: " + e.getRequestId());
+                    throw new RuntimeException("Failed to confirm payment intent: " + e.getMessage() +
+                            ", invoice: " + invoice.getId() + ", payment_intent: " + invoice.getPaymentIntent());
                 }
-                // Refresh invoice to check payment status
-                invoice = Invoice.retrieve(invoice.getId());
-                System.out.println("Refreshed Invoice with ID: " + invoice.getId() +
-                        ", status: " + invoice.getStatus() +
-                        ", charge: " + invoice.getCharge());
             }
 
             // 5️⃣ Verify payment success
             if (!"paid".equals(invoice.getStatus()) || invoice.getCharge() == null) {
                 throw new RuntimeException("Invoice payment failed: status is " + invoice.getStatus() +
                         ", charge: " + invoice.getCharge() +
-                        ", payment intent: " + invoice.getPaymentIntent());
+                        ", payment_intent: " + invoice.getPaymentIntent());
             }
 
             // 6️⃣ Transfer 4% to Connected Account
