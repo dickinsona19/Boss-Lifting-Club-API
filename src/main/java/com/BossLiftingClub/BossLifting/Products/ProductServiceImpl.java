@@ -82,6 +82,12 @@ public class ProductServiceImpl implements ProductService {
             long totalAmountCents = unitAmountCents * quantity; // Total pre-tax amount in cents for reference
             String taxRateId = "txr_1RF33tGHcVHSTvgIzTwKENXt"; // 7.5% tax rate
 
+            // Validate tax rate
+            TaxRate taxRate = TaxRate.retrieve(taxRateId);
+            if (!taxRate.getActive()) {
+                throw new RuntimeException("Tax rate is inactive: " + taxRateId);
+            }
+
             // Log input details
             System.out.println("Creating invoice for customer " + stripeCustomerId +
                     ", product: " + product.getName() +
@@ -90,9 +96,21 @@ public class ProductServiceImpl implements ProductService {
                     ", unit_amount: " + (unitAmountCents / 100.0) +
                     ", total pre-tax: " + (totalAmountCents / 100.0) + " USD");
 
-            // 1️⃣ Create invoice item
+            // 1️⃣ Create invoice
+            InvoiceCreateParams invoiceParams = InvoiceCreateParams.builder()
+                    .setCustomer(stripeCustomerId)
+                    .setCollectionMethod(InvoiceCreateParams.CollectionMethod.CHARGE_AUTOMATICALLY)
+                    .setAutoAdvance(true) // Attempts to finalize and pay automatically
+                    .build();
+            Invoice invoice = Invoice.create(invoiceParams);
+            System.out.println("Created Invoice with ID: " + invoice.getId() +
+                    ", status: " + invoice.getStatus() +
+                    ", amount_due: " + (invoice.getAmountDue() / 100.0));
+
+            // 2️⃣ Create invoice item linked to the invoice
             InvoiceItemCreateParams invoiceItemParams = InvoiceItemCreateParams.builder()
                     .setCustomer(stripeCustomerId)
+                    .setInvoice(invoice.getId()) // Explicitly link to the invoice
                     .setUnitAmount(unitAmountCents) // Price per unit in cents
                     .setQuantity((long) quantity) // Number of units
                     .setCurrency("usd")
@@ -103,17 +121,6 @@ public class ProductServiceImpl implements ProductService {
             System.out.println("Created InvoiceItem with ID: " + invoiceItem.getId() +
                     ", amount: " + (invoiceItem.getAmount() / 100.0) +
                     ", description: " + invoiceItem.getDescription());
-
-            // 2️⃣ Create invoice
-            InvoiceCreateParams invoiceParams = InvoiceCreateParams.builder()
-                    .setCustomer(stripeCustomerId)
-                    .setCollectionMethod(InvoiceCreateParams.CollectionMethod.CHARGE_AUTOMATICALLY)
-                    .setAutoAdvance(true) // Ensures invoice is finalized and paid automatically
-                    .build();
-            Invoice invoice = Invoice.create(invoiceParams);
-            System.out.println("Created Invoice with ID: " + invoice.getId() +
-                    ", status: " + invoice.getStatus() +
-                    ", amount_due: " + (invoice.getAmountDue() / 100.0));
 
             // 3️⃣ Finalize and pay invoice
             invoice = invoice.finalizeInvoice();
