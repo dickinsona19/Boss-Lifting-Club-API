@@ -456,12 +456,6 @@ public class StripeController {
                         .setPrice(mainFeePriceId) // $2.58 fee
                         .build())
                 .setDefaultPaymentMethod(paymentMethodId)
-                .setBillingCycleAnchorConfig(
-                        SubscriptionCreateParams.BillingCycleAnchorConfig.builder()
-                                .setDayOfMonth(mainAnchorDay)
-                                .setMonth(mainAnchorMonth)
-                                .build()
-                )
                 .addDefaultTaxRate("txr_1RF33tGHcVHSTvgIzTwKENXt")
                 .setTransferData(SubscriptionCreateParams.TransferData.builder()
                         .setDestination("acct_1RDvRj4gikNsBARu")
