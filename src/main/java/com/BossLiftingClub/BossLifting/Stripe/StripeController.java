@@ -25,6 +25,7 @@ import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
 import java.time.LocalDate;
 import java.time.ZoneId;
+import java.time.ZonedDateTime;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -298,54 +299,54 @@ public class StripeController {
             }
 
             // Handle invoice.paid (transfer 4% fee to Connected Account)
-            if ("invoice.paid".equals(eventType)) {
-                Invoice invoice = (Invoice) dataObjectDeserializer.getObject().orElse(null);
-                if (invoice != null && invoice.getSubscription() != null && invoice.getCharge() != null) {                    String chargeId = invoice.getCharge();
-                    // Check if a transfer already exists for this charge
-                    if (transferService.hasProcessedCharge(chargeId)) {
-                        System.out.println("Transfer already exists for charge " + chargeId + ", skipping.");
-                        return new ResponseEntity<>("Webhook processed", HttpStatus.OK);
-                    }
-
-                    Charge charge = Charge.retrieve(chargeId);
-                    if (charge != null && "succeeded".equals(charge.getStatus())) {
-                        Subscription subscription = Subscription.retrieve(invoice.getSubscription());
-                        long feeCents = calculateFeeCents(subscription);
-                        if (feeCents > 0) {
-                            try {
-                                // Check available balance before transfer
-                                Balance balance = Balance.retrieve();
-                                long availableBalance = balance.getAvailable().stream()
-                                        .filter(b -> "usd".equals(b.getCurrency()))
-                                        .mapToLong(Balance.Available::getAmount)
-                                        .sum();
-                                if (availableBalance < feeCents) {
-                                    System.err.println("Insufficient balance: " + (availableBalance / 100.0) + " USD, needed: " + (feeCents / 100.0));
-                                    return new ResponseEntity<>("Insufficient balance", HttpStatus.INTERNAL_SERVER_ERROR);
-                                }
-
-                                TransferCreateParams transferParams = TransferCreateParams.builder()
-                                        .setAmount(feeCents)
-                                        .setCurrency("usd")
-                                        .setDestination("acct_1RDvRj4gikNsBARu")
-                                        .setSourceTransaction(chargeId)
-                                        .build();
-                                Transfer transfer = Transfer.create(transferParams);
-                                System.out.println("Transferred " + (feeCents / 100.0) + " to Connected Account for invoice " + invoice.getId());
-                                // Store transfer record
-                                transferService.saveTransfer(chargeId, invoice.getId(), transfer.getId());
-                            } catch (StripeException e) {
-                                System.err.println("Transfer failed for invoice " + invoice.getId() + ": " + e.getMessage());
-                                return new ResponseEntity<>("Transfer error: " + e.getMessage(), HttpStatus.INTERNAL_SERVER_ERROR);
-                            }
-                        }
-                        // Update user status
-                        userService.updateUserAfterPayment(invoice.getCustomer(), true);
-                    } else {
-                        System.out.println("Charge was not successful. Skipping fee transfer for invoice " + invoice.getId());
-                    }
-                }
-            }
+//            if ("invoice.paid".equals(eventType)) {
+//                Invoice invoice = (Invoice) dataObjectDeserializer.getObject().orElse(null);
+//                if (invoice != null && invoice.getSubscription() != null && invoice.getCharge() != null) {                    String chargeId = invoice.getCharge();
+//                    // Check if a transfer already exists for this charge
+//                    if (transferService.hasProcessedCharge(chargeId)) {
+//                        System.out.println("Transfer already exists for charge " + chargeId + ", skipping.");
+//                        return new ResponseEntity<>("Webhook processed", HttpStatus.OK);
+//                    }
+//
+//                    Charge charge = Charge.retrieve(chargeId);
+//                    if (charge != null && "succeeded".equals(charge.getStatus())) {
+//                        Subscription subscription = Subscription.retrieve(invoice.getSubscription());
+//                        long feeCents = calculateFeeCents(subscription);
+//                        if (feeCents > 0) {
+//                            try {
+//                                // Check available balance before transfer
+//                                Balance balance = Balance.retrieve();
+//                                long availableBalance = balance.getAvailable().stream()
+//                                        .filter(b -> "usd".equals(b.getCurrency()))
+//                                        .mapToLong(Balance.Available::getAmount)
+//                                        .sum();
+//                                if (availableBalance < feeCents) {
+//                                    System.err.println("Insufficient balance: " + (availableBalance / 100.0) + " USD, needed: " + (feeCents / 100.0));
+//                                    return new ResponseEntity<>("Insufficient balance", HttpStatus.INTERNAL_SERVER_ERROR);
+//                                }
+//
+//                                TransferCreateParams transferParams = TransferCreateParams.builder()
+//                                        .setAmount(feeCents)
+//                                        .setCurrency("usd")
+//                                        .setDestination("acct_1RDvRj4gikNsBARu")
+//                                        .setSourceTransaction(chargeId)
+//                                        .build();
+//                                Transfer transfer = Transfer.create(transferParams);
+//                                System.out.println("Transferred " + (feeCents / 100.0) + " to Connected Account for invoice " + invoice.getId());
+//                                // Store transfer record
+//                                transferService.saveTransfer(chargeId, invoice.getId(), transfer.getId());
+//                            } catch (StripeException e) {
+//                                System.err.println("Transfer failed for invoice " + invoice.getId() + ": " + e.getMessage());
+//                                return new ResponseEntity<>("Transfer error: " + e.getMessage(), HttpStatus.INTERNAL_SERVER_ERROR);
+//                            }
+//                        }
+//                        // Update user status
+//                        userService.updateUserAfterPayment(invoice.getCustomer(), true);
+//                    } else {
+//                        System.out.println("Charge was not successful. Skipping fee transfer for invoice " + invoice.getId());
+//                    }
+//                }
+//            }
 
             // Handle other event types
             switch (eventType) {
@@ -418,36 +419,26 @@ public class StripeController {
         return feeCents;
     }
     private void createSubscriptions(String customerId, String paymentMethodId, double membershipPrice) throws StripeException {
-        // Determine billing cycle anchor for main subscription based on current date
+        // Determine billing cycle anchor based on current date
         LocalDate currentDate = LocalDate.now(ZoneId.of("UTC"));
-        LocalDate anchorDate = LocalDate.of(2025, 4, 26); // April 26, 2025
-        long mainAnchorDay;
-        long mainAnchorMonth;
-
-        if (currentDate.isBefore(anchorDate)) {
-            mainAnchorDay = 26L;
-            mainAnchorMonth = 4L; // April
-            System.out.println("Setting main subscription billing cycle anchor to April 26, 2025 with trial until April 26, 2025");
-        } else {
-            mainAnchorDay = currentDate.getDayOfMonth();
-            mainAnchorMonth = currentDate.getMonthValue();
-            System.out.println("Setting main subscription billing cycle anchor to current date: " + currentDate);
-        }
+        long mainAnchorDay = currentDate.getDayOfMonth();
+        long mainAnchorMonth = currentDate.getMonthValue();
+        System.out.println("Setting main subscription billing cycle anchor to current date: " + currentDate);
 
         // Map membershipPrice to Price IDs
         String mainPriceId;
         String mainFeePriceId;
         switch (Double.toString(membershipPrice)) {
             case "89.99":
-                mainPriceId = "price_1R6aIfGHcVHSTvgIlwN3wmyD"; // Replace with actual Price ID
+                mainPriceId = "price_1R6aIfGHcVHSTvgIlwN3wmyD";
                 mainFeePriceId = "price_1RF4FpGHcVHSTvgIKM8Jilwl"; // $3.60
                 break;
             case "99.99":
-                mainPriceId = "price_1RF313GHcVHSTvgI4HXgjwOA"; // Replace with actual Price ID
-                mainFeePriceId = "price_1RF4GlGHcVHSTvgIVojlVrn7"; // $4.;00
+                mainPriceId = "price_1RF313GHcVHSTvgI4HXgjwOA";
+                mainFeePriceId = "price_1RF4GlGHcVHSTvgIVojlVrn7"; // $4.00
                 break;
             case "109.99":
-                mainPriceId = "price_1RF31hGHcVHSTvgIbTnGo4vT"; // Replace with actual Price ID
+                mainPriceId = "price_1RF31hGHcVHSTvgIbTnGo4vT";
                 mainFeePriceId = "price_1RF4IsGHcVHSTvgIYOoYfxb9"; // $4.40
                 break;
             default:
@@ -461,7 +452,7 @@ public class StripeController {
                         .setPrice(mainPriceId)
                         .build())
                 .addItem(SubscriptionCreateParams.Item.builder()
-                        .setPrice(mainFeePriceId)
+                        .setPrice(mainFeePriceId) // $2.58 fee
                         .build())
                 .setDefaultPaymentMethod(paymentMethodId)
                 .setBillingCycleAnchorConfig(
@@ -470,14 +461,12 @@ public class StripeController {
                                 .setMonth(mainAnchorMonth)
                                 .build()
                 )
-                .addDefaultTaxRate("txr_1RF33tGHcVHSTvgIzTwKENXt"); // 7.5% tax rate ID
-
-        if (currentDate.isBefore(anchorDate)) {
-            subscriptionParamsBuilder.setTrialEnd(1745625600L); // April 26, 2025, 00:00 UTC
-            System.out.println("Main subscription trial set with 4% fee recurring post-trial");
-        } else {
-            System.out.println("Main subscription with immediate charge including recurring 4% fee (transferred via invoice.paid webhook)");
-        }
+                .addDefaultTaxRate("txr_1RF33tGHcVHSTvgIzTwKENXt")
+                .setTransferData(SubscriptionCreateParams.TransferData.builder()
+                        .setDestination("acct_1RDvRj4gikNsBARu")
+                        .setAmountPercent(new BigDecimal("4.0"))
+                        .build());
+        System.out.println("Main subscription with immediate charge including recurring 4% fee (transferred via invoice.paid webhook)");
 
         try {
             Subscription subscription = Subscription.create(subscriptionParamsBuilder.build());
@@ -495,6 +484,11 @@ public class StripeController {
         long nextBillingDay = 1L;
         int nextBillingYear = isBeforeJuly ? currentDate.getYear() : currentDate.getYear() + 1;
 
+        // Calculate trial end timestamp for next billing date
+        LocalDate nextBillingDate = LocalDate.of(nextBillingYear, (int) nextBillingMonth, (int) nextBillingDay);
+        ZonedDateTime nextBillingDateTime = nextBillingDate.atStartOfDay(ZoneId.of("UTC"));
+        long trialEndTimestamp = nextBillingDateTime.toEpochSecond();
+
         // Create maintenance subscription with fee as a recurring item
         SubscriptionCreateParams.Builder maintenanceParamsBuilder = SubscriptionCreateParams.builder()
                 .setCustomer(customerId)
@@ -507,9 +501,14 @@ public class StripeController {
                 .setDefaultPaymentMethod(paymentMethodId)
                 .setProrationBehavior(SubscriptionCreateParams.ProrationBehavior.NONE)
                 .addDefaultTaxRate("txr_1RF33tGHcVHSTvgIzTwKENXt")
-                .addExpand("schedule");
+                .addExpand("schedule")
+                .setTrialEnd(trialEndTimestamp)
+                .setTransferData(SubscriptionCreateParams.TransferData.builder()
+                        .setDestination("acct_1RDvRj4gikNsBARu")
+                        .setAmountPercent(new BigDecimal("4.0"))
+                        .build());
 
-        // Always set the billing cycle anchor to the next billing date
+        // Set the billing cycle anchor to the next billing date
         maintenanceParamsBuilder.setBillingCycleAnchorConfig(
                 SubscriptionCreateParams.BillingCycleAnchorConfig.builder()
                         .setDayOfMonth(nextBillingDay)
@@ -517,12 +516,7 @@ public class StripeController {
                         .build()
         );
 
-        if (currentDate.isBefore(anchorDate)) {
-            maintenanceParamsBuilder.setTrialEnd(1745625600L); // Free trial until April 26, 2025
-            System.out.println("Setting maintenance subscription trial until April 26, 2025, charging full $67.07 for period starting " + previousBillingDate + ", with billing cycle anchor to " + nextBillingMonth + "/" + nextBillingDay + "/" + nextBillingYear);
-        } else {
-            System.out.println("Setting maintenance subscription to charge full $67.07 immediately for period starting " + previousBillingDate + ", with billing cycle anchor to " + nextBillingMonth + "/" + nextBillingDay + "/" + nextBillingYear);
-        }
+        System.out.println("Setting maintenance subscription with trial until " + nextBillingDate + ", charging full $67.07 for period starting " + previousBillingDate + ", with billing cycle anchor to " + nextBillingMonth + "/" + nextBillingDay + "/" + nextBillingYear);
 
         try {
             Subscription maintenanceSubscription = Subscription.create(maintenanceParamsBuilder.build());
