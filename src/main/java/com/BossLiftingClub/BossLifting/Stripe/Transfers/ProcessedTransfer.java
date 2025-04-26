@@ -1,8 +1,7 @@
 package com.BossLiftingClub.BossLifting.Stripe.Transfers;
 
 import jakarta.persistence.Entity;
-import org.springframework.data.annotation.Id;
-
+import jakarta.persistence.Id;
 import java.time.LocalDateTime;
 
 @Entity

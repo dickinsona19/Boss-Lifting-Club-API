@@ -300,8 +300,7 @@ public class StripeController {
             // Handle invoice.paid (transfer 4% fee to Connected Account)
             if ("invoice.paid".equals(eventType)) {
                 Invoice invoice = (Invoice) dataObjectDeserializer.getObject().orElse(null);
-                if (invoice != null && invoice.getSubscription() != null && invoice.getCharge() != null) {
-                    String chargeId = invoice.getCharge();
+                if (invoice != null && invoice.getSubscription() != null && invoice.getCharge() != null) {                    String chargeId = invoice.getCharge();
                     // Check if a transfer already exists for this charge
                     if (transferService.hasProcessedCharge(chargeId)) {
                         System.out.println("Transfer already exists for charge " + chargeId + ", skipping.");
