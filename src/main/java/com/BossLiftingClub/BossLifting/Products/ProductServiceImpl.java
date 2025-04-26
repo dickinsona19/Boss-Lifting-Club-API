@@ -6,6 +6,7 @@ import com.stripe.exception.StripeException;
 import com.stripe.model.*;
 import com.stripe.param.InvoiceCreateParams;
 import com.stripe.param.InvoiceItemCreateParams;
+import com.stripe.param.PaymentIntentConfirmParams;
 import com.stripe.param.TransferCreateParams;
 import org.springframework.stereotype.Service;
 
@@ -69,14 +70,21 @@ public class ProductServiceImpl implements ProductService {
                 throw new IllegalArgumentException("Product price must be greater than zero");
             }
 
-            // Validate customer
+            // Validate customer and payment method
             Customer customer = Customer.retrieve(stripeCustomerId);
             if (customer.getDeleted() != null && customer.getDeleted()) {
                 throw new RuntimeException("Customer is deleted: " + stripeCustomerId);
             }
-            if (customer.getInvoiceSettings().getDefaultPaymentMethod() == null) {
-                throw new RuntimeException("Customer has no default payment method: " + stripeCustomerId);
+            String defaultPaymentMethodId = customer.getInvoiceSettings().getDefaultPaymentMethod();
+            if (defaultPaymentMethodId == null) {
+                throw new RuntimeException("Customer has no default payment method: " + stripeCustomerId + ". Please add a payment method.");
             }
+            // Verify payment method is valid
+            PaymentMethod paymentMethod = PaymentMethod.retrieve(defaultPaymentMethodId);
+            if (!"card".equals(paymentMethod.getType()) || paymentMethod.getCard() == null) {
+                throw new RuntimeException("Invalid default payment method for customer: " + stripeCustomerId);
+            }
+            System.out.println("Customer " + stripeCustomerId + " has valid default payment method: " + defaultPaymentMethodId);
 
             long unitAmountCents = (long) (product.getPrice() * 100); // Convert price to cents
             long totalAmountCents = unitAmountCents * quantity; // Total pre-tax amount in cents for reference
@@ -134,13 +142,32 @@ public class ProductServiceImpl implements ProductService {
                         ", Invoice ID: " + invoice.getId());
             }
 
-            // 4️⃣ Verify payment success
-            if (!"paid".equals(invoice.getStatus()) || invoice.getCharge() == null) {
-                throw new RuntimeException("Invoice payment failed: status is " + invoice.getStatus() +
+            // 4️⃣ Handle open invoice (attempt payment if not paid)
+            if ("open".equals(invoice.getStatus()) && invoice.getPaymentIntent() != null) {
+                System.out.println("Invoice is open, attempting to pay with payment intent: " + invoice.getPaymentIntent());
+                PaymentIntent paymentIntent = PaymentIntent.retrieve(invoice.getPaymentIntent());
+                if (!"succeeded".equals(paymentIntent.getStatus())) {
+                    PaymentIntentConfirmParams confirmParams = PaymentIntentConfirmParams.builder()
+                            .setPaymentMethod(defaultPaymentMethodId)
+                            .build();
+                    paymentIntent = paymentIntent.confirm(confirmParams);
+                    System.out.println("Payment intent confirmed, status: " + paymentIntent.getStatus());
+                }
+                // Refresh invoice to check payment status
+                invoice = Invoice.retrieve(invoice.getId());
+                System.out.println("Refreshed Invoice with ID: " + invoice.getId() +
+                        ", status: " + invoice.getStatus() +
                         ", charge: " + invoice.getCharge());
             }
 
-            // 5️⃣ Transfer 4% to Connected Account
+            // 5️⃣ Verify payment success
+            if (!"paid".equals(invoice.getStatus()) || invoice.getCharge() == null) {
+                throw new RuntimeException("Invoice payment failed: status is " + invoice.getStatus() +
+                        ", charge: " + invoice.getCharge() +
+                        ", payment intent: " + invoice.getPaymentIntent());
+            }
+
+            // 6️⃣ Transfer 4% to Connected Account
             long feeAmountCents = (long) (totalAmountCents * 0.04); // 4% of pre-tax amount
             if (feeAmountCents > 0) {
                 // Check available balance
@@ -166,7 +193,7 @@ public class ProductServiceImpl implements ProductService {
                 System.out.println("Transferred " + (feeAmountCents / 100.0) + " USD to Connected Account for invoice " + invoice.getId());
             }
 
-            // 6️⃣ Return hosted invoice URL
+            // 7️⃣ Return hosted invoice URL
             return invoice.getHostedInvoiceUrl();
 
         } catch (StripeException e) {
