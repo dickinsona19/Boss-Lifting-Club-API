@@ -3,10 +3,7 @@ package com.BossLiftingClub.BossLifting.Products;
 import com.google.api.client.util.Value;
 import com.stripe.Stripe;
 import com.stripe.exception.StripeException;
-import com.stripe.model.Balance;
-import com.stripe.model.Invoice;
-import com.stripe.model.InvoiceItem;
-import com.stripe.model.Transfer;
+import com.stripe.model.*;
 import com.stripe.param.InvoiceCreateParams;
 import com.stripe.param.InvoiceItemCreateParams;
 import com.stripe.param.TransferCreateParams;
@@ -72,9 +69,26 @@ public class ProductServiceImpl implements ProductService {
                 throw new IllegalArgumentException("Product price must be greater than zero");
             }
 
+            // Validate customer
+            Customer customer = Customer.retrieve(stripeCustomerId);
+            if (customer.getDeleted() != null && customer.getDeleted()) {
+                throw new RuntimeException("Customer is deleted: " + stripeCustomerId);
+            }
+            if (customer.getInvoiceSettings().getDefaultPaymentMethod() == null) {
+                throw new RuntimeException("Customer has no default payment method: " + stripeCustomerId);
+            }
+
             long unitAmountCents = (long) (product.getPrice() * 100); // Convert price to cents
             long totalAmountCents = unitAmountCents * quantity; // Total pre-tax amount in cents for reference
             String taxRateId = "txr_1RF33tGHcVHSTvgIzTwKENXt"; // 7.5% tax rate
+
+            // Log input details
+            System.out.println("Creating invoice for customer " + stripeCustomerId +
+                    ", product: " + product.getName() +
+                    ", price: " + product.getPrice() +
+                    ", quantity: " + quantity +
+                    ", unit_amount: " + (unitAmountCents / 100.0) +
+                    ", total pre-tax: " + (totalAmountCents / 100.0) + " USD");
 
             // 1️⃣ Create invoice item
             InvoiceItemCreateParams invoiceItemParams = InvoiceItemCreateParams.builder()
@@ -86,6 +100,9 @@ public class ProductServiceImpl implements ProductService {
                     .addTaxRate(taxRateId)
                     .build();
             InvoiceItem invoiceItem = InvoiceItem.create(invoiceItemParams);
+            System.out.println("Created InvoiceItem with ID: " + invoiceItem.getId() +
+                    ", amount: " + (invoiceItem.getAmount() / 100.0) +
+                    ", description: " + invoiceItem.getDescription());
 
             // 2️⃣ Create invoice
             InvoiceCreateParams invoiceParams = InvoiceCreateParams.builder()
@@ -94,16 +111,26 @@ public class ProductServiceImpl implements ProductService {
                     .setAutoAdvance(true) // Ensures invoice is finalized and paid automatically
                     .build();
             Invoice invoice = Invoice.create(invoiceParams);
+            System.out.println("Created Invoice with ID: " + invoice.getId() +
+                    ", status: " + invoice.getStatus() +
+                    ", amount_due: " + (invoice.getAmountDue() / 100.0));
 
             // 3️⃣ Finalize and pay invoice
             invoice = invoice.finalizeInvoice();
+            System.out.println("Finalized Invoice with ID: " + invoice.getId() +
+                    ", status: " + invoice.getStatus() +
+                    ", amount_due: " + (invoice.getAmountDue() / 100.0));
+
             if (invoice.getAmountDue() <= 0) {
-                throw new RuntimeException("Invoice has no amount due: check invoice items or payment method");
+                throw new RuntimeException("Invoice has no amount due: check invoice items or payment method. " +
+                        "InvoiceItem ID: " + invoiceItem.getId() +
+                        ", Invoice ID: " + invoice.getId());
             }
 
             // 4️⃣ Verify payment success
             if (!"paid".equals(invoice.getStatus()) || invoice.getCharge() == null) {
-                throw new RuntimeException("Invoice payment failed: status is " + invoice.getStatus());
+                throw new RuntimeException("Invoice payment failed: status is " + invoice.getStatus() +
+                        ", charge: " + invoice.getCharge());
             }
 
             // 5️⃣ Transfer 4% to Connected Account
@@ -117,7 +144,8 @@ public class ProductServiceImpl implements ProductService {
                         .sum();
                 if (availableBalance < feeAmountCents) {
                     // Optionally queue transfer (implement as discussed previously)
-                    throw new RuntimeException("Insufficient balance for transfer: available " + (availableBalance / 100.0) + " USD, needed " + (feeAmountCents / 100.0));
+                    throw new RuntimeException("Insufficient balance for transfer: available " +
+                            (availableBalance / 100.0) + " USD, needed " + (feeAmountCents / 100.0));
                 }
 
                 TransferCreateParams transferParams = TransferCreateParams.builder()
@@ -135,7 +163,7 @@ public class ProductServiceImpl implements ProductService {
             return invoice.getHostedInvoiceUrl();
 
         } catch (StripeException e) {
-            throw new RuntimeException("Stripe error: " + e.getMessage());
+            throw new RuntimeException("Stripe error: " + e.getMessage() + "; request-id: " + e.getRequestId());
         }
     }
 }
