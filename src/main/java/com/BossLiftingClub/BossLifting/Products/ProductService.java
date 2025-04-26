@@ -7,5 +7,5 @@ public interface ProductService {
     Products addProduct(Products products);
     Products updateProduct(Long id, Products products);
     void deleteProduct(Long id);
-    public String createInvoiceForUser(Long productId, String stripeCustomerId, int quantity);
+     String createInvoiceForUser(Long productId, String stripeCustomerId, int quantity);
 }

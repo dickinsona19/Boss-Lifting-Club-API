@@ -73,16 +73,16 @@ public class ProductServiceImpl implements ProductService {
             }
 
             long unitAmountCents = (long) (product.getPrice() * 100); // Convert price to cents
-            long totalAmountCents = unitAmountCents * quantity; // Total pre-tax amount in cents
+            long totalAmountCents = unitAmountCents * quantity; // Total pre-tax amount in cents for reference
             String taxRateId = "txr_1RF33tGHcVHSTvgIzTwKENXt"; // 7.5% tax rate
 
             // 1️⃣ Create invoice item
             InvoiceItemCreateParams invoiceItemParams = InvoiceItemCreateParams.builder()
                     .setCustomer(stripeCustomerId)
-                    .setAmount(totalAmountCents)
+                    .setUnitAmount(unitAmountCents) // Price per unit in cents
+                    .setQuantity((long) quantity) // Number of units
                     .setCurrency("usd")
                     .setDescription(product.getName())
-                    .setQuantity((long) quantity) // Explicitly set quantity for clarity
                     .addTaxRate(taxRateId)
                     .build();
             InvoiceItem invoiceItem = InvoiceItem.create(invoiceItemParams);
