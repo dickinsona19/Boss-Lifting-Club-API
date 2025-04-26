@@ -348,6 +348,7 @@ public class StripeController {
 //                }
 //            }
 
+
             // Handle other event types
             switch (eventType) {
                 case "customer.subscription.created":
