@@ -411,7 +411,7 @@ public class StripeController {
                         .setQuantity(1L)
                         .build()) // One-time $50 application fee
                 .setDefaultPaymentMethod(paymentMethodId)
-                .addDefaultTaxRate("txr_1RIsQGGHcVHSTvgIF3A1Nacp")
+//                .addDefaultTaxRate("txr_1RIsQGGHcVHSTvgIF3A1Nacp")
                 .setTransferData(SubscriptionCreateParams.TransferData.builder()
                         .setDestination("acct_1RItOGQBjxohVze7")
                         .setAmountPercent(new BigDecimal("4.0"))
@@ -455,7 +455,7 @@ public class StripeController {
                         .build())
                 .setDefaultPaymentMethod(paymentMethodId)
                 .setProrationBehavior(SubscriptionCreateParams.ProrationBehavior.NONE)
-                .addDefaultTaxRate("txr_1RIsQGGHcVHSTvgIF3A1Nacp")
+//                .addDefaultTaxRate("txr_1RIsQGGHcVHSTvgIF3A1Nacp")
                 .addExpand("schedule")
                 .setTrialEnd(trialEndTimestamp)
                 .setTransferData(SubscriptionCreateParams.TransferData.builder()
