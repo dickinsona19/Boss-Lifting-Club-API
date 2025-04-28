@@ -23,6 +23,7 @@ import org.springframework.web.bind.annotation.*;
 
 import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
 import java.time.ZonedDateTime;
@@ -44,6 +45,7 @@ public class StripeController {
     private final String webhookSubscriptionSecret;
     private final EventService eventService;
     private final TransferService transferService;
+
     public StripeController(EventService eventService, TransferService transferService, UserService userService, StripeService stripeService, @Value("${stripe.webhook.secret}") String webhookSecret, @Value("${stripe.webhook.subscriptionSecret}") String webhookSubscriptionSecret, UserTitlesRepository userTitlesRepository, MembershipRepository membershipRepository, UserRepository userRepository) {
         this.eventService = eventService;
         this.stripeService = stripeService;
@@ -94,7 +96,7 @@ public class StripeController {
                         System.out.println("User created with ID: " + user.getId() + " for customer: " + customerId);
 
                         // Create subscriptions (assuming this method exists from previous request)
-                        createSubscriptions(customerId, paymentMethodId, 89.99);
+                        createSubscriptions(customerId, paymentMethodId, 99.99);
 
                     } else {
                         // No payment method provided, delete the Stripe customer
@@ -155,7 +157,6 @@ public class StripeController {
     }
 
 
-
     @PostMapping("/signupWithCard")
     public ResponseEntity<Map<String, String>> signupWithCard(@RequestBody UserRequest userRequest) {
         try {
@@ -210,65 +211,6 @@ public class StripeController {
         } catch (Exception e) {
             e.printStackTrace();
             return ResponseEntity.status(500).body(Map.of("error", "Failed: " + e.getMessage()));
-        }
-    }
-    @PostMapping("/api/migrate-subscriptions")
-    public ResponseEntity<String> migrateSubscriptions() {
-        try {
-            // Retrieve all users using userService.findAll()
-            List<User> users = userService.findAll();
-            int processed = 0;
-            int failed = 0;
-
-            for (User user : users) {
-                String customerId = user.getUserStripeMemberId();
-                double membershipPrice = 89.99;
-                if (customerId == null || customerId.isEmpty()) {
-                    System.err.println("Skipping user ID " + user.getId() + ": No Stripe Customer ID");
-                    failed++;
-                    continue;
-                }
-                try {
-                    // Retrieve default payment method
-                    Customer customer = Customer.retrieve(customerId);
-                    String paymentMethodId = customer.getInvoiceSettings().getDefaultPaymentMethod();
-                    if (paymentMethodId == null) {
-                        System.err.println("Skipping user ID " + user.getId() + ": No default payment method for customer " + customerId);
-                        failed++;
-                        continue;
-                    }
-
-                    // Delete existing subscriptions
-                    SubscriptionCollection subscriptions = Subscription.list(
-                            SubscriptionListParams.builder()
-                                    .setCustomer(customerId)
-                                    .build()
-                    );
-                    for (Subscription sub : subscriptions.getData()) {
-                        if ("active".equals(sub.getStatus()) || "trialing".equals(sub.getStatus())) {
-                            sub.cancel();
-                            System.out.println("Canceled existing subscription " + sub.getId() + " for customer " + customerId);
-                        }
-                    }
-
-                    // Apply new subscriptions
-                    createSubscriptions(customerId, paymentMethodId, membershipPrice);
-                    System.out.println("Successfully migrated subscriptions for user ID " + user.getId() + ", customer " + customerId);
-                    processed++;
-                } catch (StripeException e) {
-                    System.err.println("Failed to migrate subscriptions for user ID " + user.getId() + ", customer " + customerId + ": " + e.getMessage());
-                    failed++;
-                }
-            }
-
-            String response = String.format("Migration completed: %d users processed successfully, %d failed", processed, failed);
-            System.out.println(response);
-            return ResponseEntity.ok(response);
-        } catch (Exception e) {
-            e.printStackTrace();
-            String error = "Migration failed: " + e.getMessage();
-            System.err.println(error);
-            return ResponseEntity.status(500).body(error);
         }
     }
 
@@ -419,12 +361,21 @@ public class StripeController {
         }
         return feeCents;
     }
+
     private void createSubscriptions(String customerId, String paymentMethodId, double membershipPrice) throws StripeException {
-        // Determine billing cycle anchor based on current date
+        // Validate customer and payment method
+        Customer customer = Customer.retrieve(customerId);
+        if (customer.getDeleted() != null && customer.getDeleted()) {
+            throw new RuntimeException("Customer is deleted: " + customerId);
+        }
+        if (paymentMethodId == null || !PaymentMethod.retrieve(paymentMethodId).getCustomer().equals(customerId)) {
+            throw new RuntimeException("Invalid payment method for customer: " + customerId);
+        }
+        System.out.println("Customer " + customerId + " has valid payment method: " + paymentMethodId);
+
+        // Determine billing cycle based on current date
         LocalDate currentDate = LocalDate.now(ZoneId.of("UTC"));
-        long mainAnchorDay = currentDate.getDayOfMonth();
-        long mainAnchorMonth = currentDate.getMonthValue();
-        System.out.println("Setting main subscription billing cycle anchor to current date: " + currentDate);
+        System.out.println("Setting main subscription billing cycle to current date: " + currentDate);
 
         // Map membershipPrice to Price IDs
         String mainPriceId;
@@ -446,31 +397,40 @@ public class StripeController {
                 throw new IllegalArgumentException("Invalid membership price: " + membershipPrice);
         }
 
-        // Create main subscription with fee as a recurring item
+        // Application fee Price ID (one-time)
+        String applicationFeePriceId = "price_1RIjOrGHcVHSTvgIV8PjVnRD"; // Replace with actual Price ID
+
+        // Create main subscription with application fee as a one-time item
         SubscriptionCreateParams.Builder subscriptionParamsBuilder = SubscriptionCreateParams.builder()
                 .setCustomer(customerId)
                 .addItem(SubscriptionCreateParams.Item.builder()
                         .setPrice(mainPriceId)
                         .build())
                 .addItem(SubscriptionCreateParams.Item.builder()
-                        .setPrice(mainFeePriceId) // $2.58 fee
+                        .setPrice(mainFeePriceId)
                         .build())
+                .addItem(SubscriptionCreateParams.Item.builder()
+                        .setPrice(applicationFeePriceId)
+                        .setQuantity(1L)
+                        .build()) // One-time $50 application fee
                 .setDefaultPaymentMethod(paymentMethodId)
                 .addDefaultTaxRate("txr_1RF33tGHcVHSTvgIzTwKENXt")
                 .setTransferData(SubscriptionCreateParams.TransferData.builder()
                         .setDestination("acct_1RDvRj4gikNsBARu")
                         .setAmountPercent(new BigDecimal("4.0"))
                         .build());
-        System.out.println("Main subscription with immediate charge including recurring 4% fee (transferred via invoice.paid webhook)");
+        System.out.println("Main subscription with immediate charge including one-time $50 application fee and recurring 4% fee transferred to Connected Account");
 
         try {
             Subscription subscription = Subscription.create(subscriptionParamsBuilder.build());
-            System.out.println("Main subscription created with ID: " + subscription.getId() + " with billing cycle anchor: " + mainAnchorMonth + "/" + mainAnchorDay + "/2025");
+            System.out.println("Main subscription created with ID: " + subscription.getId() +
+                    ", billing cycle starts: " + currentDate);
         } catch (StripeException e) {
-            System.err.println("Failed to create main subscription: " + e.getMessage());
+            System.err.println("Failed to create main subscription: " + e.getMessage() + "; request-id: " + e.getRequestId());
             throw e;
         }
 
+        // Maintenance subscription logic
         LocalDate currentYearJanuaryBilling = LocalDate.of(currentDate.getYear(), 1, 1);
         LocalDate currentYearJulyBilling = LocalDate.of(currentDate.getYear(), 7, 1);
         boolean isBeforeJuly = currentDate.isBefore(currentYearJulyBilling) || currentDate.isEqual(currentYearJulyBilling);
@@ -483,6 +443,12 @@ public class StripeController {
         LocalDate nextBillingDate = LocalDate.of(nextBillingYear, (int) nextBillingMonth, (int) nextBillingDay);
         ZonedDateTime nextBillingDateTime = nextBillingDate.atStartOfDay(ZoneId.of("UTC"));
         long trialEndTimestamp = nextBillingDateTime.toEpochSecond();
+
+        // Validate trial end is in the future
+        long currentTimestamp = Instant.now().getEpochSecond();
+        if (trialEndTimestamp <= currentTimestamp) {
+            throw new IllegalArgumentException("Trial end timestamp must be in the future: " + nextBillingDate);
+        }
 
         // Create maintenance subscription with fee as a recurring item
         SubscriptionCreateParams.Builder maintenanceParamsBuilder = SubscriptionCreateParams.builder()
@@ -503,21 +469,14 @@ public class StripeController {
                         .setAmountPercent(new BigDecimal("4.0"))
                         .build());
 
-        // Set the billing cycle anchor to the next billing date
-        maintenanceParamsBuilder.setBillingCycleAnchorConfig(
-                SubscriptionCreateParams.BillingCycleAnchorConfig.builder()
-                        .setDayOfMonth(nextBillingDay)
-                        .setMonth(nextBillingMonth)
-                        .build()
-        );
-
-        System.out.println("Setting maintenance subscription with trial until " + nextBillingDate + ", charging full $67.07 for period starting " + previousBillingDate + ", with billing cycle anchor to " + nextBillingMonth + "/" + nextBillingDay + "/" + nextBillingYear);
+        System.out.println("Setting maintenance subscription with trial until " + nextBillingDate +
+                ", charging full $67.26 for period starting " + previousBillingDate);
 
         try {
             Subscription maintenanceSubscription = Subscription.create(maintenanceParamsBuilder.build());
             System.out.println("Maintenance subscription created with ID: " + maintenanceSubscription.getId());
         } catch (StripeException e) {
-            System.err.println("Failed to create maintenance subscription: " + e.getMessage());
+            System.err.println("Failed to create maintenance subscription: " + e.getMessage() + "; request-id: " + e.getRequestId());
             throw e;
         }
     }
