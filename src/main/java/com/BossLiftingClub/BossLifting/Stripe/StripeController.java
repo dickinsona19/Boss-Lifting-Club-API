@@ -404,16 +404,16 @@ public class StripeController {
         SubscriptionCreateParams.Builder subscriptionParamsBuilder = SubscriptionCreateParams.builder()
                 .setCustomer(customerId)
                 .addItem(SubscriptionCreateParams.Item.builder()
-                        .setPrice(mainPriceId)
+                        .setPrice("price_1R6II54PBwB8fzGsIhXvOVuT")
                         .build())
                 .addItem(SubscriptionCreateParams.Item.builder()
-                        .setPrice(applicationFeePriceId)
+                        .setPrice("price_1RItYn4PBwB8fzGspoLEfvmp")
                         .setQuantity(1L)
                         .build()) // One-time $50 application fee
                 .setDefaultPaymentMethod(paymentMethodId)
                 .addDefaultTaxRate("txr_1RIsQGGHcVHSTvgIF3A1Nacp")
                 .setTransferData(SubscriptionCreateParams.TransferData.builder()
-                        .setDestination("acct_1RDvRj4gikNsBARu")
+                        .setDestination("acct_1RItOGQBjxohVze7")
                         .setAmountPercent(new BigDecimal("4.0"))
                         .build());
         System.out.println("Main subscription with immediate charge including one-time $50 application fee and recurring 4% fee transferred to Connected Account");
@@ -459,7 +459,7 @@ public class StripeController {
                 .addExpand("schedule")
                 .setTrialEnd(trialEndTimestamp)
                 .setTransferData(SubscriptionCreateParams.TransferData.builder()
-                        .setDestination("acct_1RDvRj4gikNsBARu")
+                        .setDestination("acct_1RItOGQBjxohVze7")
                         .setAmountPercent(new BigDecimal("4.0"))
                         .build());
 
