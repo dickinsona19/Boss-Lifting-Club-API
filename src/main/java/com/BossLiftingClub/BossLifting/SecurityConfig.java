@@ -43,7 +43,7 @@ public class SecurityConfig {
         ));
 
         // Allowed HTTP methods (same as web)
-        config.setAllowedMethods(List.of("GET", "POST", "OPTIONS", "DELETE", "PUT"));
+        config.setAllowedMethods(List.of("GET", "POST", "OPTIONS", "DELETE", "PUT", "PATCH"));
 
         // Allowed headers (same as web)
         config.setAllowedHeaders(List.of("*"));
