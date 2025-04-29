@@ -1,8 +1,10 @@
 package com.BossLiftingClub.BossLifting.Twilio;
 
 import com.twilio.Twilio;
+import com.twilio.rest.api.v2010.account.Message;
 import com.twilio.rest.verify.v2.service.Verification;
 import com.twilio.rest.verify.v2.service.VerificationCheck;
+import com.twilio.type.PhoneNumber;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
@@ -38,4 +40,16 @@ public class TwilioService {
                 .create();
         return "approved".equals(verificationCheck.getStatus());
     }
+
+    public String sendSMS(String phoneNumber, String message) {
+        // Send generic SMS
+        Message twilioMessage = Message.creator(
+                        new PhoneNumber(phoneNumber),
+                        new PhoneNumber(twilioPhoneNumber),
+                        message)
+                .create();
+        return twilioMessage.getSid();
+    }
+
+
 }
