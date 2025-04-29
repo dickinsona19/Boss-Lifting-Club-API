@@ -410,19 +410,22 @@ public class StripeController {
         );
 
         // Step 4: Create the subscription (without the application fee)
-        SubscriptionCreateParams subscriptionParams = SubscriptionCreateParams.builder()
+        SubscriptionCreateParams.Builder subscriptionBuilder = SubscriptionCreateParams.builder()
                 .setCustomer(customerId)
                 .addItem(SubscriptionCreateParams.Item.builder()
                         .setPrice(mainPriceId)
                         .build())
                 .setDefaultPaymentMethod(paymentMethodId)
-                .addDefaultTaxRate("txr_1RJKTd4PBwB8fzGsU5TETSdQ") // Tax applies only to subscription
                 .setTransferData(SubscriptionCreateParams.TransferData.builder()
                         .setDestination("acct_1RItOGQBjxohVze7")
                         .setAmountPercent(new BigDecimal("4.0"))
-                        .build())
-                .build();
+                        .build());
 
+// Check if the membership price is not 948 before adding the tax rate
+        if (membershipPrice != "948.00") {
+            subscriptionBuilder.addDefaultTaxRate("txr_1RJKTd4PBwB8fzGsU5TETSdQ");
+        }
+        SubscriptionCreateParams subscriptionParams = subscriptionBuilder.build();
         Subscription subscription = Subscription.create(subscriptionParams);
 
         System.out.println("Subscription created: " + subscription.getId());
