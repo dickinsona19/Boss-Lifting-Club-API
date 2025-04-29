@@ -13,14 +13,17 @@ public class TwilioService {
     private final String ACCOUNT_SID;
     private final String AUTH_TOKEN;
     private final String VERIFY_SERVICE_SID;
+    private final String MESSAGING_SERVICE_SID;
 
     public TwilioService(
             @Value("${TWILIO_ACCOUNT_SID}") String accountSid,
             @Value("${TWILIO_AUTH_TOKEN}") String authToken,
-            @Value("${TWILIO_VERIFY_SERVICE_SID}") String verifyServiceSid) {
+            @Value("${TWILIO_VERIFY_SERVICE_SID}") String verifyServiceSid,
+            @Value("{MESSAGING_SERVICE_SID}")String MESSAGING_SERVICE_SID) {
         this.ACCOUNT_SID = accountSid;
         this.AUTH_TOKEN = authToken;
         this.VERIFY_SERVICE_SID = verifyServiceSid;
+        this.MESSAGING_SERVICE_SID = MESSAGING_SERVICE_SID;
         Twilio.init(ACCOUNT_SID, AUTH_TOKEN); // Initialize Twilio client
     }
 
@@ -42,14 +45,12 @@ public class TwilioService {
     }
 
     public String sendSMS(String phoneNumber, String message) {
-        // Send generic SMS
+        // Send generic SMS using Messaging Service SID
         Message twilioMessage = Message.creator(
                         new PhoneNumber(phoneNumber),
-                        new PhoneNumber(twilioPhoneNumber),
+                        MESSAGING_SERVICE_SID, // Use Messaging Service SID instead of PhoneNumber
                         message)
                 .create();
         return twilioMessage.getSid();
     }
-
-
 }
