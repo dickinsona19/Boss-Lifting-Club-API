@@ -149,7 +149,6 @@ public class StripeController {
         Membership membership = membershipRepository.findByName(metadata.get("membership"))
                 .orElseThrow(() -> new RuntimeException("Membership not found in database"));
         user.setMembership(membership);
-        user.setLockedInRate(membership.getPrice());
         user.setUserTitles(foundingUserTitle);
         user.setUserStripeMemberId(customerId);
         System.out.println("userLog: " + user);
