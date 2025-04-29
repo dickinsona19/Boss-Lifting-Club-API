@@ -422,7 +422,7 @@ public class StripeController {
                         .build());
 
 // Check if the membership price is not 948 before adding the tax rate
-        if (membershipPrice != "948.00") {
+        if (!membershipPrice.equals("948.00")) {
             subscriptionBuilder.addDefaultTaxRate("txr_1RJKTd4PBwB8fzGsU5TETSdQ");
         }
         SubscriptionCreateParams subscriptionParams = subscriptionBuilder.build();
