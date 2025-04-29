@@ -19,11 +19,11 @@ public class TwilioService {
             @Value("${TWILIO_ACCOUNT_SID}") String accountSid,
             @Value("${TWILIO_AUTH_TOKEN}") String authToken,
             @Value("${TWILIO_VERIFY_SERVICE_SID}") String verifyServiceSid,
-            @Value("{MESSAGING_SERVICE_SID}")String MESSAGING_SERVICE_SID) {
+            @Value("{MESSAGING_SERVICE_SID}")String messageServiceSID) {
         this.ACCOUNT_SID = accountSid;
         this.AUTH_TOKEN = authToken;
         this.VERIFY_SERVICE_SID = verifyServiceSid;
-        this.MESSAGING_SERVICE_SID = MESSAGING_SERVICE_SID;
+        this.MESSAGING_SERVICE_SID = messageServiceSID;
         Twilio.init(ACCOUNT_SID, AUTH_TOKEN); // Initialize Twilio client
     }
 
@@ -46,8 +46,8 @@ public class TwilioService {
 
     public String sendSMS(String phoneNumber, String message) {
         Message twilioMessage = Message.creator(
-                        new PhoneNumber(phoneNumber),
-                        "CLTLiftingClub", // Alphanumeric Sender ID
+                        new PhoneNumber(phoneNumber), // To
+                        new PhoneNumber("+18447306626"), // From: Your Twilio phone number
                         message)
                 .create();
         return twilioMessage.getSid();
