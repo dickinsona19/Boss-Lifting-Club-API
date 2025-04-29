@@ -96,7 +96,7 @@ public class StripeController {
                         System.out.println("User created with ID: " + user.getId() + " for customer: " + customerId);
 
                         // Create subscriptions (assuming this method exists from previous request)
-                        createSubscriptions(customerId, paymentMethodId, 99.99);
+                        createSubscriptions(customerId, paymentMethodId, user.isLockedInRate());
 
                     } else {
                         // No payment method provided, delete the Stripe customer
@@ -135,6 +135,8 @@ public class StripeController {
         user.setLastName(metadata.get("lastName"));
         user.setPhoneNumber(metadata.get("phoneNumber"));
         user.setPassword(metadata.get("password"));
+        user.setLockedInRate(metadata.get("lockedInRate"));
+
         if (metadata.get("referredUserId") != null) {
             User referrer = userRepository.findById(Long.valueOf(metadata.get("referredUserId")))
                     .orElseThrow(() -> new RuntimeException("Referred User not found in database"));
@@ -190,6 +192,7 @@ public class StripeController {
             metadata.put("password", userRequest.getPassword()); // Consider hashing if sensitive
             metadata.put("userTitle", foundingUserTitle.getTitle());
             metadata.put("membership", membership.getName());
+            metadata.put("lockedInRate",userRequest.getLockedInRate());
             if (userRequest.getReferralId() != null) {
                 String referredId = userRequest.getReferralId().toString();
                 metadata.put("referredUserId", referredId);
@@ -332,37 +335,8 @@ public class StripeController {
         }
     }
 
-    private long calculateFeeCents(Subscription subscription) {
-        long feeCents = 0;
-        for (SubscriptionItem item : subscription.getItems().getData()) {
-            Price price = item.getPrice();
-            String priceId = price.getId();
-            System.out.println("Processing priceId: " + priceId);
-            switch (priceId) {
-                case "price_1R6aIfGHcVHSTvgIlwN3wmyD":
-                case "price_1RF4FpGHcVHSTvgIKM8Jilwl":
-                    feeCents = 360;
-                    break;
-                case "price_1RF313GHcVHSTvgI4HXgjwOA":
-                case "price_1RF4GlGHcVHSTvgIVojlVrn7":
-                    feeCents = 400;
-                    break;
-                case "price_1RF31hGHcVHSTvgIbTnGo4vT":
-                case "price_1RF4IsGHcVHSTvgIYOoYfxb9":
-                    feeCents = 440;
-                    break;
-                case "price_1RF30SGHcVHSTvgIpegCzQ0m":
-                case "price_1RF4yDGHcVHSTvgIbRn9gXHJ":
-                    feeCents = 240;
-                    break;
-                default:
-                    System.out.println("Unknown priceId: " + priceId);
-            }
-        }
-        return feeCents;
-    }
 
-    private void createSubscriptions(String customerId, String paymentMethodId, double membershipPrice) throws StripeException {
+    private void createSubscriptions(String customerId, String paymentMethodId, String membershipPrice) throws StripeException {
         // Validate customer and payment method
         Customer customer = Customer.retrieve(customerId);
         if (customer.getDeleted() != null && customer.getDeleted()) {
@@ -380,52 +354,81 @@ public class StripeController {
         // Map membershipPrice to Price IDs
         String mainPriceId;
         String mainFeePriceId;
-        switch (Double.toString(membershipPrice)) {
+        switch (membershipPrice) {
             case "89.99":
-                mainPriceId = "price_1R6aIfGHcVHSTvgIlwN3wmyD";
+                mainPriceId = "price_1R6II54PBwB8fzGsIhXvOVuT";
                 mainFeePriceId = "price_1RF4FpGHcVHSTvgIKM8Jilwl"; // $3.60
                 break;
             case "99.99":
-                mainPriceId = "price_1RF313GHcVHSTvgI4HXgjwOA";
+                mainPriceId = "price_1R6II54PBwB8fzGsIhXvOVuT";
                 mainFeePriceId = "price_1RF4GlGHcVHSTvgIVojlVrn7"; // $4.00
                 break;
             case "109.99":
                 mainPriceId = "price_1RF31hGHcVHSTvgIbTnGo4vT";
                 mainFeePriceId = "price_1RF4IsGHcVHSTvgIYOoYfxb9"; // $4.40
                 break;
+            case "948.00":
+                mainPriceId = "price_1RJJuTGHcVHSTvgI2pVN6hfx";
+                break;
             default:
                 throw new IllegalArgumentException("Invalid membership price: " + membershipPrice);
         }
 
         // Application fee Price ID (one-time)
-        String applicationFeePriceId = "price_1RIjOrGHcVHSTvgIV8PjVnRD"; // Replace with actual Price ID
+        String applicationFeePriceId = "price_1RJKS44PBwB8fzGsFAkRs5Tk"; // One-time application fee Price ID
 
-        // Create main subscription with application fee as a one-time item
-        SubscriptionCreateParams.Builder subscriptionParamsBuilder = SubscriptionCreateParams.builder()
+        // Step 1: Create a one-time InvoiceItem for the application fee
+        InvoiceItemCreateParams invoiceItemParams = InvoiceItemCreateParams.builder()
+                .setCustomer(customerId)
+                .setPrice(applicationFeePriceId) // One-time $50 application fee
+                .setQuantity(1L)
+                .build();
+
+        InvoiceItem invoiceItem = InvoiceItem.create(invoiceItemParams);
+
+        // Step 2: Create a transfer for the application fee to the destination account
+        // Since InvoiceItems don't support direct transfers, we'll need to handle this after the payment
+        // We'll finalize the invoice immediately to charge the customer
+        com.stripe.model.Invoice invoice = com.stripe.model.Invoice.create(
+                com.stripe.param.InvoiceCreateParams.builder()
+                        .setCustomer(customerId)
+                        .setCollectionMethod(com.stripe.param.InvoiceCreateParams.CollectionMethod.CHARGE_AUTOMATICALLY)
+                        .build()
+        );
+        invoice.finalizeInvoice();
+
+        // Step 3: Create a transfer for the application fee amount
+        Long applicationFeeAmount = 50_00L; // $50 in cents (adjust based on your Price object)
+        Long transferAmount = (long) (applicationFeeAmount * 0.04); // 4% of the application fee
+
+        com.stripe.model.Transfer transfer = com.stripe.model.Transfer.create(
+                com.stripe.param.TransferCreateParams.builder()
+                        .setAmount(transferAmount)
+                        .setCurrency("usd")
+                        .setDestination("acct_1RItOGQBjxohVze7")
+                        .setSourceTransaction(invoice.getCharge()) // Link to the charge from the invoice
+                        .build()
+        );
+
+        // Step 4: Create the subscription (without the application fee)
+        SubscriptionCreateParams subscriptionParams = SubscriptionCreateParams.builder()
                 .setCustomer(customerId)
                 .addItem(SubscriptionCreateParams.Item.builder()
                         .setPrice(mainPriceId)
                         .build())
-                .addItem(SubscriptionCreateParams.Item.builder()
-                        .setPrice(applicationFeePriceId)
-                        .setQuantity(1L)
-                        .build()) // One-time $50 application fee
                 .setDefaultPaymentMethod(paymentMethodId)
-                .addDefaultTaxRate("txr_1RIsQGGHcVHSTvgIF3A1Nacp")
+                .addDefaultTaxRate("txr_1RJKTd4PBwB8fzGsU5TETSdQ") // Tax applies only to subscription
                 .setTransferData(SubscriptionCreateParams.TransferData.builder()
-                        .setDestination("acct_1RDvRj4gikNsBARu")
+                        .setDestination("acct_1RItOGQBjxohVze7")
                         .setAmountPercent(new BigDecimal("4.0"))
-                        .build());
-        System.out.println("Main subscription with immediate charge including one-time $50 application fee and recurring 4% fee transferred to Connected Account");
+                        .build())
+                .build();
 
-        try {
-            Subscription subscription = Subscription.create(subscriptionParamsBuilder.build());
-            System.out.println("Main subscription created with ID: " + subscription.getId() +
-                    ", billing cycle starts: " + currentDate);
-        } catch (StripeException e) {
-            System.err.println("Failed to create main subscription: " + e.getMessage() + "; request-id: " + e.getRequestId());
-            throw e;
-        }
+        Subscription subscription = Subscription.create(subscriptionParams);
+
+        System.out.println("Subscription created: " + subscription.getId());
+
+
 
         // Maintenance subscription logic
         LocalDate currentYearJanuaryBilling = LocalDate.of(currentDate.getYear(), 1, 1);
@@ -455,11 +458,10 @@ public class StripeController {
                         .build())
                 .setDefaultPaymentMethod(paymentMethodId)
                 .setProrationBehavior(SubscriptionCreateParams.ProrationBehavior.NONE)
-                .addDefaultTaxRate("txr_1RIsQGGHcVHSTvgIF3A1Nacp")
                 .addExpand("schedule")
                 .setTrialEnd(trialEndTimestamp)
                 .setTransferData(SubscriptionCreateParams.TransferData.builder()
-                        .setDestination("acct_1RDvRj4gikNsBARu")
+                        .setDestination("acct_1RItOGQBjxohVze7")
                         .setAmountPercent(new BigDecimal("4.0"))
                         .build());
 

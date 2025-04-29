@@ -64,8 +64,6 @@ public class User {
     @Column(name = "referral_code",  unique = true)
     private String referralCode;
 
-
-
     @ManyToOne
     @JoinColumn(name = "referred_by_id")
     private User referredBy;
