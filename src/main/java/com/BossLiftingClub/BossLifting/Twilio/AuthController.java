@@ -13,7 +13,7 @@ import java.util.Map;
 @RequestMapping("/api/auth")
 public class AuthController {
     private final TwilioService twilioService;
-    private  String waiverBaseUrl =" http://localhost:5173/signWaiver";
+    private  String waiverBaseUrl =" https://boss-lifting-club-api-1.onrender.com/signWaiver";
     public AuthController(TwilioService twilioService) {
         this.twilioService = twilioService;
     }
@@ -41,7 +41,7 @@ public class AuthController {
     public ResponseEntity<Map<String, String>> sendWaiverSMS(@RequestBody Map<String, String> request) {
         String phoneNumber = request.get("phoneNumber");
         String userId = request.get("userId"); // Optional: include userId in request
-        String isPotentialUser = request.getOrDefault("isPotentialUser", "true"); // Default to true
+        String isPotentialUser = request.getOrDefault("isPotentialUser", "false"); // Default to true
 
         try {
             // Validate phone number format (E.164, e.g., +1234567890)
