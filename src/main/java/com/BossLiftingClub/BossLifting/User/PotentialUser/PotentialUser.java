@@ -1,7 +1,9 @@
 package com.BossLiftingClub.BossLifting.User.PotentialUser;
 
+import com.BossLiftingClub.BossLifting.User.FirebaseService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.http.ResponseEntity;
@@ -9,6 +11,9 @@ import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
+import org.springframework.web.multipart.MultipartFile;
+
+import java.io.IOException;
 import java.util.List;
 import java.util.Optional;
 
@@ -55,7 +60,11 @@ interface PotentialUserRepository extends JpaRepository<PotentialUser, Long> {}
 class PotentialUserService {
     @Autowired
     private PotentialUserRepository repository;
+    private final PotentialUserRepository potentialUserRepository;
 
+    public PotentialUserService(PotentialUserRepository potentialUserRepository) {
+        this.potentialUserRepository = potentialUserRepository;
+    }
     public List<PotentialUser> getAllUsers() {
         return repository.findAll();
     }
@@ -68,14 +77,14 @@ class PotentialUserService {
         repository.deleteById(id);
     }
 
-    public PotentialUser updateWaiverSignature(Long id, String waiverSignature) {
-        Optional<PotentialUser> optionalUser = repository.findById(id);
-        if (optionalUser.isPresent()) {
-            PotentialUser user = optionalUser.get();
-            user.setWaiverSignature(waiverSignature);
-            return repository.save(user);
+    public Optional<PotentialUser> updateWaiverSignature(Long id, String imageUrl) {
+        Optional<PotentialUser> potentialUserOpt = potentialUserRepository.findById(id);
+        if (potentialUserOpt.isPresent()) {
+            PotentialUser potentialUser = potentialUserOpt.get();
+            potentialUser.setWaiverSignature(imageUrl); // Assuming a field like waiverSignature exists
+            return Optional.of(potentialUserRepository.save(potentialUser));
         }
-        return null;
+        return Optional.empty();
     }
 }
 
@@ -86,6 +95,11 @@ class PotentialUserController {
     @Autowired
     private PotentialUserService service;
 
+    private final FirebaseService firebaseService;
+    public PotentialUserController(PotentialUserService potentialUserService, FirebaseService firebaseService) {
+        this.service = potentialUserService;
+        this.firebaseService = firebaseService;
+    }
     @GetMapping
     public List<PotentialUser> getAllUsers() {
         return service.getAllUsers();
@@ -102,12 +116,22 @@ class PotentialUserController {
         return ResponseEntity.noContent().build();
     }
 
-    @PatchMapping("/{id}/waiver-signature")
-    public ResponseEntity<PotentialUser> updateWaiverSignature(@PathVariable Long id, @RequestBody String waiverSignature) {
-        PotentialUser updatedUser = service.updateWaiverSignature(id, waiverSignature);
-        if (updatedUser != null) {
-            return ResponseEntity.ok(updatedUser);
+    @PostMapping("/{id}/waiver")
+    public ResponseEntity<PotentialUser> saveWaiverSignature(
+            @PathVariable Long id,
+            @RequestParam("file") MultipartFile file) {
+
+        try {
+            // Upload to Firebase and get public URL
+            String imageUrl = firebaseService.uploadImage(file);
+
+            // Save the image URL as waiver signature for the potential user
+            return service.updateWaiverSignature(id, imageUrl)
+                    .map(ResponseEntity::ok)
+                    .orElseGet(() -> ResponseEntity.notFound().build());
+
+        } catch (IOException e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
         }
-        return ResponseEntity.notFound().build();
     }
 }
