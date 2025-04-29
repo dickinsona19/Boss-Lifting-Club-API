@@ -404,16 +404,16 @@ public class StripeController {
         SubscriptionCreateParams.Builder subscriptionParamsBuilder = SubscriptionCreateParams.builder()
                 .setCustomer(customerId)
                 .addItem(SubscriptionCreateParams.Item.builder()
-                        .setPrice("price_1R6II54PBwB8fzGsIhXvOVuT")
+                        .setPrice(mainPriceId)
                         .build())
                 .addItem(SubscriptionCreateParams.Item.builder()
-                        .setPrice("price_1RItYn4PBwB8fzGspoLEfvmp")
+                        .setPrice(applicationFeePriceId)
                         .setQuantity(1L)
                         .build()) // One-time $50 application fee
                 .setDefaultPaymentMethod(paymentMethodId)
-//                .addDefaultTaxRate("txr_1RIsQGGHcVHSTvgIF3A1Nacp")
+                .addDefaultTaxRate("txr_1RIsQGGHcVHSTvgIF3A1Nacp")
                 .setTransferData(SubscriptionCreateParams.TransferData.builder()
-                        .setDestination("acct_1RItOGQBjxohVze7")
+                        .setDestination("acct_1RDvRj4gikNsBARu")
                         .setAmountPercent(new BigDecimal("4.0"))
                         .build());
         System.out.println("Main subscription with immediate charge including one-time $50 application fee and recurring 4% fee transferred to Connected Account");
@@ -455,11 +455,11 @@ public class StripeController {
                         .build())
                 .setDefaultPaymentMethod(paymentMethodId)
                 .setProrationBehavior(SubscriptionCreateParams.ProrationBehavior.NONE)
-//                .addDefaultTaxRate("txr_1RIsQGGHcVHSTvgIF3A1Nacp")
+                .addDefaultTaxRate("txr_1RIsQGGHcVHSTvgIF3A1Nacp")
                 .addExpand("schedule")
                 .setTrialEnd(trialEndTimestamp)
                 .setTransferData(SubscriptionCreateParams.TransferData.builder()
-                        .setDestination("acct_1RItOGQBjxohVze7")
+                        .setDestination("acct_1RDvRj4gikNsBARu")
                         .setAmountPercent(new BigDecimal("4.0"))
                         .build());
 
