@@ -368,7 +368,7 @@ public class StripeController {
                 mainFeePriceId = "price_1RF4IsGHcVHSTvgIYOoYfxb9"; // $4.40
                 break;
             case "948.00":
-                mainPriceId = "price_1RJJuTGHcVHSTvgI2pVN6hfx";
+                mainPriceId = "price_1RJKoG4PBwB8fzGsLPNYksvK";
                 break;
             default:
                 throw new IllegalArgumentException("Invalid membership price: " + membershipPrice);
@@ -454,7 +454,7 @@ public class StripeController {
         SubscriptionCreateParams.Builder maintenanceParamsBuilder = SubscriptionCreateParams.builder()
                 .setCustomer(customerId)
                 .addItem(SubscriptionCreateParams.Item.builder()
-                        .setPrice("price_1RF30SGHcVHSTvgIpegCzQ0m") // $59.99
+                        .setPrice("price_1RItXf4PBwB8fzGszMGdvbnx") // $59.99
                         .build())
                 .setDefaultPaymentMethod(paymentMethodId)
                 .setProrationBehavior(SubscriptionCreateParams.ProrationBehavior.NONE)
