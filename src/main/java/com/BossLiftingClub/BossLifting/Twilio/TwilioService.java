@@ -45,10 +45,9 @@ public class TwilioService {
     }
 
     public String sendSMS(String phoneNumber, String message) {
-        // Send generic SMS using Messaging Service SID
         Message twilioMessage = Message.creator(
                         new PhoneNumber(phoneNumber),
-                        MESSAGING_SERVICE_SID, // Use Messaging Service SID instead of PhoneNumber
+                        "CLTLiftingClub", // Alphanumeric Sender ID
                         message)
                 .create();
         return twilioMessage.getSid();
