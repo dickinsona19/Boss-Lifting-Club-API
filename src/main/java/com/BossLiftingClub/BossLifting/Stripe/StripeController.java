@@ -400,14 +400,7 @@ public class StripeController {
         Long applicationFeeAmount = 50_00L; // $50 in cents (adjust based on your Price object)
         Long transferAmount = (long) (applicationFeeAmount * 0.04); // 4% of the application fee
 
-        com.stripe.model.Transfer transfer = com.stripe.model.Transfer.create(
-                com.stripe.param.TransferCreateParams.builder()
-                        .setAmount(transferAmount)
-                        .setCurrency("usd")
-                        .setDestination("acct_1RItOGQBjxohVze7")
-                        .setSourceTransaction(invoice.getCharge()) // Link to the charge from the invoice
-                        .build()
-        );
+
 
         // Step 4: Create the subscription (without the application fee)
         SubscriptionCreateParams.Builder subscriptionBuilder = SubscriptionCreateParams.builder()
