@@ -56,7 +56,7 @@ public class AuthController {
             String message = "Sign this waiver for a free day pass at CLT Lifting Club: " + waiverUrl;
 
             // Send SMS via TwilioService
-            String sid = twilioService.sendSMS(phoneNumber, message);
+            String sid = twilioService.sendSMS("+1"+phoneNumber, message);
 
             return ResponseEntity.ok(Map.of("message", "Waiver SMS sent", "sid", sid));
         } catch (Exception e) {
