@@ -54,7 +54,6 @@ public class PotentialUser {
         this.phoneNumber = phoneNumber;
         this.hasReddemedFreePass = hasReddemedFreePass;
     }
-
     // Getters and Setters
     public Long getId() { return id; }
     public void setId(Long id) { this.id = id; }
