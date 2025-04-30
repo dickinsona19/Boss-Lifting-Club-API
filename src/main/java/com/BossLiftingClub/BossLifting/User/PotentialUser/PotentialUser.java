@@ -27,17 +27,18 @@ class PotentialUser {
     private String lastName;
     private String email;
     private String waiverSignature;
-    private boolean hasReddemedFreePass;
+    private boolean hasReddemedFreePass = false;
 
     // Default constructor
     public PotentialUser() {}
 
     // Parameterized constructor
-    public PotentialUser(String firstName, String lastName, String email, String waiverSignature) {
+    public PotentialUser(String firstName, String lastName, String email, String waiverSignature, boolean hasReddemedFreePass) {
         this.firstName = firstName;
         this.lastName = lastName;
         this.email = email;
         this.waiverSignature = waiverSignature;
+        this.hasReddemedFreePass = hasReddemedFreePass;
     }
 
     // Getters and Setters
