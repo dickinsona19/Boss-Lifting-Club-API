@@ -95,6 +95,15 @@ class PotentialUserService {
         }
         return Optional.empty();
     }
+    public Optional<PotentialUser> updateFreePassStatus(Long id, boolean hasRedeemedFreePass) {
+        Optional<PotentialUser> potentialUserOpt = potentialUserRepository.findById(id);
+        if (potentialUserOpt.isPresent()) {
+            PotentialUser potentialUser = potentialUserOpt.get();
+            potentialUser.setHasReddemedFreePass(hasRedeemedFreePass);
+            return Optional.of(potentialUserRepository.save(potentialUser));
+        }
+        return Optional.empty();
+    }
 }
 
 // Controller
@@ -142,5 +151,11 @@ class PotentialUserController {
         } catch (IOException e) {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
         }
+    }
+    @PostMapping("/{id}/free-pass")
+    public ResponseEntity<PotentialUser> redeemFreePass(@PathVariable Long id) {
+        return service.updateFreePassStatus(id, true)
+                .map(ResponseEntity::ok)
+                .orElseGet(() -> ResponseEntity.notFound().build());
     }
 }
