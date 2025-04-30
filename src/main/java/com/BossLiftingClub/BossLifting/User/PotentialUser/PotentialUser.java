@@ -25,17 +25,18 @@ class PotentialUser {
     private Long id;
     private String firstName;
     private String lastName;
-    private String phoneNumber;
+    private String email;
     private String waiverSignature;
+    private boolean hasReddemedFreePass;
 
     // Default constructor
     public PotentialUser() {}
 
     // Parameterized constructor
-    public PotentialUser(String firstName, String lastName, String phoneNumber, String waiverSignature) {
+    public PotentialUser(String firstName, String lastName, String email, String waiverSignature) {
         this.firstName = firstName;
         this.lastName = lastName;
-        this.phoneNumber = phoneNumber;
+        this.email = email;
         this.waiverSignature = waiverSignature;
     }
 
@@ -46,10 +47,18 @@ class PotentialUser {
     public void setFirstName(String firstName) { this.firstName = firstName; }
     public String getLastName() { return lastName; }
     public void setLastName(String lastName) { this.lastName = lastName; }
-    public String getPhoneNumber() { return phoneNumber; }
-    public void setPhoneNumber(String phoneNumber) { this.phoneNumber = phoneNumber; }
+    public String getEmail() { return email; }
+    public void setEmail(String email) { this.email = email; }
     public String getWaiverSignature() { return waiverSignature; }
     public void setWaiverSignature(String waiverSignature) { this.waiverSignature = waiverSignature; }
+
+    public boolean isHasReddemedFreePass() {
+        return hasReddemedFreePass;
+    }
+
+    public void setHasReddemedFreePass(boolean hasReddemedFreePass) {
+        this.hasReddemedFreePass = hasReddemedFreePass;
+    }
 }
 
 // Repository
@@ -82,6 +91,15 @@ class PotentialUserService {
         if (potentialUserOpt.isPresent()) {
             PotentialUser potentialUser = potentialUserOpt.get();
             potentialUser.setWaiverSignature(imageUrl); // Assuming a field like waiverSignature exists
+            return Optional.of(potentialUserRepository.save(potentialUser));
+        }
+        return Optional.empty();
+    }
+    public Optional<PotentialUser> updateFreePassStatus(Long id, boolean hasRedeemedFreePass) {
+        Optional<PotentialUser> potentialUserOpt = potentialUserRepository.findById(id);
+        if (potentialUserOpt.isPresent()) {
+            PotentialUser potentialUser = potentialUserOpt.get();
+            potentialUser.setHasReddemedFreePass(hasRedeemedFreePass);
             return Optional.of(potentialUserRepository.save(potentialUser));
         }
         return Optional.empty();
@@ -133,5 +151,11 @@ class PotentialUserController {
         } catch (IOException e) {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
         }
+    }
+    @PostMapping("/{id}/free-pass")
+    public ResponseEntity<PotentialUser> redeemFreePass(@PathVariable Long id) {
+        return service.updateFreePassStatus(id, true)
+                .map(ResponseEntity::ok)
+                .orElseGet(() -> ResponseEntity.notFound().build());
     }
 }
