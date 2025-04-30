@@ -1,16 +1,13 @@
 package com.BossLiftingClub.BossLifting.User.PotentialUser;
 
 import com.BossLiftingClub.BossLifting.User.FirebaseService;
+import jakarta.persistence.*;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.http.ResponseEntity;
-import jakarta.persistence.Entity;
-import jakarta.persistence.GeneratedValue;
-import jakarta.persistence.GenerationType;
-import jakarta.persistence.Id;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
@@ -19,47 +16,66 @@ import java.util.Optional;
 
 // Entity
 @Entity
-class PotentialUser {
+@Table(name = "potential_user") // Explicitly specify the table name
+public class PotentialUser {
+
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
+    @Column(name = "id") // Matches the database column name
     private Long id;
+
+    @Column(name = "first_name") // Maps to first_name in the database
     private String firstName;
+
+    @Column(name = "last_name") // Maps to last_name in the database
     private String lastName;
+
+    @Column(name = "email") // Matches the database column name
     private String email;
+
+    @Column(name = "waiver_signature") // Maps to waiver_signature in the database
     private String waiverSignature;
+
+    @Column(name = "phone_number") // Maps to phone_number in the database
+    private String phoneNumber;
+
+    @Column(name = "has_reddemed_free_pass") // Maps to has_reddemed_free_pass in the database
     private boolean hasReddemedFreePass = false;
 
     // Default constructor
     public PotentialUser() {}
 
     // Parameterized constructor
-    public PotentialUser(String firstName, String lastName, String email, String waiverSignature, boolean hasReddemedFreePass) {
+    public PotentialUser(String firstName, String lastName, String email, String waiverSignature, String phoneNumber, boolean hasReddemedFreePass) {
         this.firstName = firstName;
         this.lastName = lastName;
         this.email = email;
         this.waiverSignature = waiverSignature;
+        this.phoneNumber = phoneNumber;
         this.hasReddemedFreePass = hasReddemedFreePass;
     }
 
     // Getters and Setters
     public Long getId() { return id; }
     public void setId(Long id) { this.id = id; }
+
     public String getFirstName() { return firstName; }
     public void setFirstName(String firstName) { this.firstName = firstName; }
+
     public String getLastName() { return lastName; }
     public void setLastName(String lastName) { this.lastName = lastName; }
+
     public String getEmail() { return email; }
     public void setEmail(String email) { this.email = email; }
+
     public String getWaiverSignature() { return waiverSignature; }
     public void setWaiverSignature(String waiverSignature) { this.waiverSignature = waiverSignature; }
 
-    public boolean isHasReddemedFreePass() {
-        return hasReddemedFreePass;
-    }
+    public String getPhoneNumber() { return phoneNumber; }
+    public void setPhoneNumber(String phoneNumber) { this.phoneNumber = phoneNumber; }
 
-    public void setHasReddemedFreePass(boolean hasReddemedFreePass) {
-        this.hasReddemedFreePass = hasReddemedFreePass;
-    }
+    public boolean isHasReddemedFreePass() { return hasReddemedFreePass; }
+    public void setHasReddemedFreePass(boolean hasReddemedFreePass) { this.hasReddemedFreePass = hasReddemedFreePass; }
 }
 
 // Repository
