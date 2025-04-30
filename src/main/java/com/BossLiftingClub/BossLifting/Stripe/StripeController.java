@@ -355,11 +355,11 @@ public class StripeController {
         String mainFeePriceId;
         switch (membershipPrice) {
             case "89.99":
-                mainPriceId = "price_1R6II54PBwB8fzGsIhXvOVuT";
+                mainPriceId = "price_1R6aIfGHcVHSTvgIlwN3wmyD";
                 mainFeePriceId = "price_1RF4FpGHcVHSTvgIKM8Jilwl"; // $3.60
                 break;
             case "99.99":
-                mainPriceId = "price_1R6II54PBwB8fzGsIhXvOVuT";
+                mainPriceId = "price_1RF313GHcVHSTvgI4HXgjwOA";
                 mainFeePriceId = "price_1RF4GlGHcVHSTvgIVojlVrn7"; // $4.00
                 break;
             case "109.99":
@@ -367,14 +367,14 @@ public class StripeController {
                 mainFeePriceId = "price_1RF4IsGHcVHSTvgIYOoYfxb9"; // $4.40
                 break;
             case "948.00":
-                mainPriceId = "price_1RJKoG4PBwB8fzGsLPNYksvK";
+                mainPriceId = "price_1RJJuTGHcVHSTvgI2pVN6hfx";
                 break;
             default:
                 throw new IllegalArgumentException("Invalid membership price: " + membershipPrice);
         }
 
         // Application fee Price ID (one-time)
-        String applicationFeePriceId = "price_1RJKS44PBwB8fzGsFAkRs5Tk"; // One-time application fee Price ID
+        String applicationFeePriceId = "price_1RJOFhGHcVHSTvgI08VPh4XY"; // One-time application fee Price ID
 
         // Step 1: Create a one-time InvoiceItem for the application fee
         InvoiceItemCreateParams invoiceItemParams = InvoiceItemCreateParams.builder()
@@ -396,9 +396,6 @@ public class StripeController {
         );
         invoice.finalizeInvoice();
 
-        // Step 3: Create a transfer for the application fee amount
-        Long applicationFeeAmount = 50_00L; // $50 in cents (adjust based on your Price object)
-        Long transferAmount = (long) (applicationFeeAmount * 0.04); // 4% of the application fee
 
 
 
@@ -410,13 +407,13 @@ public class StripeController {
                         .build())
                 .setDefaultPaymentMethod(paymentMethodId)
                 .setTransferData(SubscriptionCreateParams.TransferData.builder()
-                        .setDestination("acct_1RItOGQBjxohVze7")
+                        .setDestination("acct_1RDvRj4gikNsBARu")
                         .setAmountPercent(new BigDecimal("4.0"))
                         .build());
 
 // Check if the membership price is not 948 before adding the tax rate
         if (!membershipPrice.equals("948.00")) {
-            subscriptionBuilder.addDefaultTaxRate("txr_1RJKTd4PBwB8fzGsU5TETSdQ");
+            subscriptionBuilder.addDefaultTaxRate("txr_1RIsQGGHcVHSTvgIF3A1Nacp");
         }
         SubscriptionCreateParams subscriptionParams = subscriptionBuilder.build();
         Subscription subscription = Subscription.create(subscriptionParams);
@@ -449,14 +446,14 @@ public class StripeController {
         SubscriptionCreateParams.Builder maintenanceParamsBuilder = SubscriptionCreateParams.builder()
                 .setCustomer(customerId)
                 .addItem(SubscriptionCreateParams.Item.builder()
-                        .setPrice("price_1RItXf4PBwB8fzGszMGdvbnx") // $59.99
+                        .setPrice("price_1RF30SGHcVHSTvgIpegCzQ0m") // $59.99
                         .build())
                 .setDefaultPaymentMethod(paymentMethodId)
                 .setProrationBehavior(SubscriptionCreateParams.ProrationBehavior.NONE)
                 .addExpand("schedule")
                 .setTrialEnd(trialEndTimestamp)
                 .setTransferData(SubscriptionCreateParams.TransferData.builder()
-                        .setDestination("acct_1RItOGQBjxohVze7")
+                        .setDestination("acct_1RDvRj4gikNsBARu")
                         .setAmountPercent(new BigDecimal("4.0"))
                         .build());
 
