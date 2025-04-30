@@ -7,6 +7,7 @@ public class UserRequest {
     private String password;
     private String membershipName;
     private Long   referralId;
+    private String lockedInRate;
 
     // Getters and setters
     public String getFirstName() { return firstName; }
@@ -30,5 +31,13 @@ public class UserRequest {
 
     public void setReferralId(Long referralId) {
         this.referralId = referralId;
+    }
+
+    public String getLockedInRate() {
+        return lockedInRate;
+    }
+
+    public void setLockedInRate(String lockedInRate) {
+        this.lockedInRate = lockedInRate;
     }
 }
