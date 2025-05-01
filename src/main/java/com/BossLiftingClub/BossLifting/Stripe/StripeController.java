@@ -521,7 +521,7 @@ public class StripeController {
             MimeMessageHelper helper = new MimeMessageHelper(message, true);
 
             // Hardcoded password reset link with userId
-            String resetLink = "http://localhost:5173/reset-password?id=" + userId;
+            String resetLink = "https://boss-lifting-club-api.onrender.com/reset-password?id=" + userId;
 
             // Professional email content for Clt Lifting
             String subject = "Password Reset Request for Clt Lifting";
@@ -536,7 +536,7 @@ public class StripeController {
                     <p>Thank you for choosing CLT Lifting Club LLC!</p>
                     <p>Best regards,<br>The CLT Lifting Team</p>
                     <hr>
-                    <p style="font-size: 12px; color: #777;">CLT Lifting Club LLC, 123 Strength St, Charlotte, NC, USA</p>
+                    <p style="font-size: 12px; color: #777;">CLT Lifting Club LLC, 3100 South Blvd, Charlotte, NC, USA</p>
                 </body>
                 </html>
                 """.formatted(resetLink);
