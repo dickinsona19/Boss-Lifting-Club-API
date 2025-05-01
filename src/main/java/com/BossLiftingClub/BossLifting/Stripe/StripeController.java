@@ -8,6 +8,7 @@ import com.BossLiftingClub.BossLifting.User.Membership.Membership;
 import com.BossLiftingClub.BossLifting.User.Membership.MembershipRepository;
 import com.BossLiftingClub.BossLifting.User.UserTitles.UserTitles;
 import com.BossLiftingClub.BossLifting.User.UserTitles.UserTitlesRepository;
+import com.stripe.Stripe;
 import com.stripe.exception.SignatureVerificationException;
 import com.stripe.exception.StripeException;
 import com.stripe.model.*;
@@ -15,10 +16,15 @@ import com.stripe.model.checkout.Session;
 import com.stripe.net.Webhook;
 import com.stripe.param.*;
 import com.stripe.param.checkout.SessionCreateParams;
+import jakarta.mail.MessagingException;
+import jakarta.mail.internet.MimeMessage;
 import jakarta.servlet.http.HttpServletRequest;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.mail.javamail.JavaMailSender;
+import org.springframework.mail.javamail.MimeMessageHelper;
 import org.springframework.web.bind.annotation.*;
 
 import java.math.BigDecimal;
@@ -45,7 +51,8 @@ public class StripeController {
     private final String webhookSubscriptionSecret;
     private final EventService eventService;
     private final TransferService transferService;
-
+    @Autowired
+    private JavaMailSender mailSender;
     public StripeController(EventService eventService, TransferService transferService, UserService userService, StripeService stripeService, @Value("${stripe.webhook.secret}") String webhookSecret, @Value("${stripe.webhook.subscriptionSecret}") String webhookSubscriptionSecret, UserTitlesRepository userTitlesRepository, MembershipRepository membershipRepository, UserRepository userRepository) {
         this.eventService = eventService;
         this.stripeService = stripeService;
@@ -487,6 +494,65 @@ public class StripeController {
 
         } catch (StripeException e) {
             return "Error: " + e.getMessage();
+        }
+    }
+
+
+
+    @PostMapping("/{userId}/sendPasswordEmail")
+    public ResponseEntity<String> sendPasswordResetEmail(@PathVariable Integer userId, @RequestParam String cusId) {
+        // Validate cusId format
+        if (cusId == null || !cusId.startsWith("cus_")) {
+            return ResponseEntity.badRequest().body("Invalid customer ID format");
+        }
+
+        try {
+
+
+            // Fetch customer email from Stripe
+            Customer customer = Customer.retrieve(cusId);
+            String toEmail = customer.getEmail();
+            if (toEmail == null || toEmail.isEmpty()) {
+                return ResponseEntity.badRequest().body("No email found for customer ID: " + cusId);
+            }
+
+            // Prepare and send email
+            MimeMessage message = mailSender.createMimeMessage();
+            MimeMessageHelper helper = new MimeMessageHelper(message, true);
+
+            // Hardcoded password reset link with userId
+            String resetLink = "http://localhost:5173/reset-password?id=" + userId;
+
+            // Professional email content for Clt Lifting
+            String subject = "Password Reset Request for Clt Lifting";
+            String htmlContent = """
+                <html>
+                <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333;">
+                    <h2>Password Reset Request</h2>
+                    <p>Dear Member,</p>
+                    <p>We received a request to reset your password for your CLT Lifting Club LLC account. Click the link below to reset your password:</p>
+                    <p><a href="%s" style="background-color: #28a745; color: #fff; padding: 10px 20px; text-decoration: none; border-radius: 5px;">Reset Your Password</a></p>
+                    <p>If you did not request a password reset, please ignore this email or contact our support team at support@cltlifting.com.</p>
+                    <p>Thank you for choosing CLT Lifting Club LLC!</p>
+                    <p>Best regards,<br>The CLT Lifting Team</p>
+                    <hr>
+                    <p style="font-size: 12px; color: #777;">CLT Lifting Club LLC, 123 Strength St, Charlotte, NC, USA</p>
+                </body>
+                </html>
+                """.formatted(resetLink);
+
+            helper.setTo(toEmail);
+            helper.setSubject(subject);
+            helper.setText(htmlContent, true);
+            helper.setFrom("cltliftingclubtech@gmail.com");
+
+            mailSender.send(message);
+
+            return ResponseEntity.ok("Password reset email sent to " + toEmail);
+        } catch (StripeException e) {
+            return ResponseEntity.status(400).body("Stripe error: " + e.getMessage());
+        } catch (MessagingException e) {
+            return ResponseEntity.status(500).body("Failed to send email: " + e.getMessage());
         }
     }
 }
