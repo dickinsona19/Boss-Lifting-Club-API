@@ -521,7 +521,7 @@ public class StripeController {
             MimeMessageHelper helper = new MimeMessageHelper(message, true);
 
             // Hardcoded password reset link with userId
-            String resetLink = "https://boss-lifting-club-api.onrender.com/reset-password?id=" + userId;
+            String resetLink = "https://www.cltliftingclub.com/reset-password?id=" + userId;
 
             // Professional email content for Clt Lifting
             String subject = "Password Reset Request for Clt Lifting";
