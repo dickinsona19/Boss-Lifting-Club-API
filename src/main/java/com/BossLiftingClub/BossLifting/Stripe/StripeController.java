@@ -478,6 +478,7 @@ public class StripeController {
             Map<String, Object> params = new HashMap<>();
             Map<String, Object> transferData = new HashMap<>();
             transferData.put("destination", "acct_1RDvRj4gikNsBARu");
+            transferData.put("amount_percent", 4);
             params.put("transfer_data", transferData);
 
             Subscription updatedSubscription = subscription.update(params);
