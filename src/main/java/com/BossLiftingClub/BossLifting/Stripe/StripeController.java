@@ -468,4 +468,24 @@ public class StripeController {
             throw e;
         }
     }
+    @PostMapping("/update-subscription-transfer")
+    public String updateSubscriptionTransferData(@RequestParam String subId) {
+        try {
+            // Step 1: Retrieve the subscription
+            Subscription subscription = Subscription.retrieve(subId);
+
+            // Step 2: Update the subscription with new transfer_data
+            Map<String, Object> params = new HashMap<>();
+            Map<String, Object> transferData = new HashMap<>();
+            transferData.put("destination", "acct_1RDvRj4gikNsBARu");
+            params.put("transfer_data", transferData);
+
+            Subscription updatedSubscription = subscription.update(params);
+
+            return "Subscription transfer data updated successfully. Subscription ID: " + updatedSubscription.getId();
+
+        } catch (StripeException e) {
+            return "Error: " + e.getMessage();
+        }
+    }
 }
