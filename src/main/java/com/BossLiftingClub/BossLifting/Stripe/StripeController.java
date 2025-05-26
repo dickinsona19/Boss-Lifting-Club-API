@@ -555,4 +555,45 @@ public class StripeController {
             return ResponseEntity.status(500).body("Failed to send email: " + e.getMessage());
         }
     }
+    @PostMapping("/update-payment-method")
+    public Map<String, Object> updatePaymentMethod(@RequestBody Map<String, String> request) {
+        Map<String, Object> response = new HashMap<>();
+        try {
+            String customerId = request.get("customerId");
+            String paymentMethodId = request.get("paymentMethodId");
+
+            // Attach payment method to customer
+            PaymentMethod paymentMethod = PaymentMethod.retrieve(paymentMethodId);
+            paymentMethod.attach(new HashMap<String, Object>() {{
+                put("customer", customerId);
+            }});
+
+            // Set as default payment method
+            Customer customer = Customer.retrieve(customerId);
+            customer.update(new HashMap<String, Object>() {{
+                put("invoice_settings", new HashMap<String, Object>() {{
+                    put("default_payment_method", paymentMethodId);
+                }});
+            }});
+
+            response.put("success", true);
+        } catch (StripeException e) {
+            response.put("error", e.getMessage());
+        }
+        return response;
+    }
+    @PostMapping("/create-setup-intent")
+    public Map<String, String> createSetupIntent(@RequestBody Map<String, String> request) throws StripeException {
+        String customerId = request.get("customerId");
+        SetupIntent setupIntent = SetupIntent.create(
+                new HashMap<String, Object>() {{
+                    put("customer", customerId);
+                    put("payment_method_types", new String[]{"card"});
+                }}
+        );
+        return new HashMap<String, String>() {{
+            put("clientSecret", setupIntent.getClientSecret());
+        }};
+    }
+
 }
