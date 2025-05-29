@@ -423,15 +423,15 @@ public class StripeController {
         String mainFeePriceId;
         switch (membershipPrice) {
             case "89.99":
-                mainPriceId = "price_1R6aIfGHcVHSTvgIlwN3wmyD";
+                mainPriceId = "price_1RF2gE4PBwB8fzGsa1BPg5Ny";
                 mainFeePriceId = "price_1RF4FpGHcVHSTvgIKM8Jilwl"; // $3.60
                 break;
             case "99.99":
-                mainPriceId = "price_1RF313GHcVHSTvgI4HXgjwOA";
+                mainPriceId = "price_1RF2gE4PBwB8fzGsa1BPg5Ny";
                 mainFeePriceId = "price_1RF4GlGHcVHSTvgIVojlVrn7"; // $4.00
                 break;
             case "109.99":
-                mainPriceId = "price_1RF31hGHcVHSTvgIbTnGo4vT";
+                mainPriceId = "price_1RF2gE4PBwB8fzGsa1BPg5Ny";
                 mainFeePriceId = "price_1RF4IsGHcVHSTvgIYOoYfxb9"; // $4.40
                 break;
             case "948.00":
@@ -514,7 +514,7 @@ public class StripeController {
         SubscriptionCreateParams.Builder maintenanceParamsBuilder = SubscriptionCreateParams.builder()
                 .setCustomer(customerId)
                 .addItem(SubscriptionCreateParams.Item.builder()
-                        .setPrice("price_1RF30SGHcVHSTvgIpegCzQ0m") // $59.99
+                        .setPrice("price_1RItXf4PBwB8fzGszMGdvbnx") // $59.99
                         .build())
                 .setDefaultPaymentMethod(paymentMethodId)
                 .setProrationBehavior(SubscriptionCreateParams.ProrationBehavior.NONE)
