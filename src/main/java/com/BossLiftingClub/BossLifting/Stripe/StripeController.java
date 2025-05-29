@@ -442,7 +442,7 @@ public class StripeController {
         }
 
         // Application fee Price ID (one-time)
-        String applicationFeePriceId = "price_1RJOFhGHcVHSTvgI08VPh4XY"; // One-time application fee Price ID
+        String applicationFeePriceId = "price_1RJKS44PBwB8fzGsFAkRs5Tk"; // One-time application fee Price ID
 
         // Step 1: Create a one-time InvoiceItem for the application fee
         InvoiceItemCreateParams invoiceItemParams = InvoiceItemCreateParams.builder()
@@ -475,13 +475,13 @@ public class StripeController {
                         .build())
                 .setDefaultPaymentMethod(paymentMethodId)
                 .setTransferData(SubscriptionCreateParams.TransferData.builder()
-                        .setDestination("acct_1RDvRj4gikNsBARu")
+                        .setDestination("aacct_1RItOGQBjxohVze7")
                         .setAmountPercent(new BigDecimal("4.0"))
                         .build());
 
 // Check if the membership price is not 948 before adding the tax rate
         if (!membershipPrice.equals("948.00")) {
-            subscriptionBuilder.addDefaultTaxRate("txr_1RIsQGGHcVHSTvgIF3A1Nacp");
+            subscriptionBuilder.addDefaultTaxRate("txr_1RJKTd4PBwB8fzGsU5TETSdQ");
         }
         SubscriptionCreateParams subscriptionParams = subscriptionBuilder.build();
         Subscription subscription = Subscription.create(subscriptionParams);
@@ -521,7 +521,7 @@ public class StripeController {
                 .addExpand("schedule")
                 .setTrialEnd(trialEndTimestamp)
                 .setTransferData(SubscriptionCreateParams.TransferData.builder()
-                        .setDestination("acct_1RDvRj4gikNsBARu")
+                        .setDestination("acct_1RItOGQBjxohVze7")
                         .setAmountPercent(new BigDecimal("4.0"))
                         .build());
 
