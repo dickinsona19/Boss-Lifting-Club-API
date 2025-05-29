@@ -475,7 +475,7 @@ public class StripeController {
                         .build())
                 .setDefaultPaymentMethod(paymentMethodId)
                 .setTransferData(SubscriptionCreateParams.TransferData.builder()
-                        .setDestination("aacct_1RItOGQBjxohVze7")
+                        .setDestination("acct_1RItOGQBjxohVze7")
                         .setAmountPercent(new BigDecimal("4.0"))
                         .build());
 
