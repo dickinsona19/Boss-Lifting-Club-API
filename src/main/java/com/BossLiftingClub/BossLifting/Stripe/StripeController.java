@@ -646,8 +646,8 @@ public class StripeController {
             MimeMessageHelper helper = new MimeMessageHelper(message, true);
 
             // Testing link and feedback form link (replace with actual URLs)
-            String testingLink = "https://play.google.com/apps/test/com.cltliftingclub.app";
-            String feedbackFormLink = "https://forms.gle/your_form_link";
+            String testingLink = "https://play.google.com/apps/test/com.adickinson.CltLiftingClub/1";
+
             String contact = "support@cltliftingclub.com";
 
             // Professional HTML email content for CLT Lifting Club
@@ -656,22 +656,20 @@ public class StripeController {
                 <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333;">
                     <h2>Test the CLT Lifting Club App</h2>
                     <p>Dear Member,</p>
-                    <p>You’re invited to test the CLT Lifting Club app, launching on the Play Store soon! Your feedback will help us perfect it by June 23, 2025. Join today, June 9, 2025.</p>
+                    <p>You’re invited to test the CLT Lifting Club app, launching on the Play Store soon!</p>
                     <p><a href="%s" style="background-color: #28a745; color: #fff; padding: 10px 20px; text-decoration: none; border-radius: 5px;">Join the Test Now</a></p>
                     <p>Steps:<br>
                     1. Click the link above.<br>
                     2. Install the app from the Play Store (no “Unknown Sources” needed).<br>
                     3. Log in with your membership credentials (contact %s if unsure).<br>
                     4. Requires Android 8.0+.<br>
-                    5. Share feedback via this form: <a href="%s">%s</a> or reply to this email.</p>
-                    <p>As a tester, your input is crucial! Report bugs or suggestions to %s. We’ll update you on the Play Store release.</p>
                     <p>Thank you for choosing CLT Lifting Club LLC!</p>
                     <p>Best regards,<br>The CLT Lifting Team</p>
                     <hr>
                     <p style="font-size: 12px; color: #777;">CLT Lifting Club LLC, 3100 South Blvd, Charlotte, NC, USA</p>
                 </body>
                 </html>
-                """.formatted(testingLink, contact, feedbackFormLink, feedbackFormLink, contact);
+                """.formatted(testingLink, contact);
 
             helper.setTo(toEmail);
             helper.setSubject("Test the CLT Lifting Club App for Play Store Launch – Join Now!");
