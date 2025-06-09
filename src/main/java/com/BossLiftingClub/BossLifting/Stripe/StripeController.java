@@ -646,7 +646,7 @@ public class StripeController {
             MimeMessageHelper helper = new MimeMessageHelper(message, true);
 
             // Testing link and feedback form link (replace with actual URLs)
-            String testingLink = "https://play.google.com/apps/test/com.adickinson.CltLiftingClub/1";
+            String testingLink = "https://play.google.com/store/apps/details?id=com.adickinson.CltLiftingClub";
             String internalTestingLink = "https://play.google.com/apps/internaltest/4700609801587188644";
 
             String contact = "support@cltliftingclub.com";
