@@ -616,6 +616,75 @@ public class StripeController {
             return ResponseEntity.status(500).body("Failed to send email: " + e.getMessage());
         }
     }
+    @PostMapping("/{userId}/sendAndroidEmail")
+    public ResponseEntity<String> sendTestEmail(@PathVariable Long userId) {
+        // Fetch user from database
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new RuntimeException("User not found with ID: " + userId));
+
+        // Validate stripeCusId format
+        String stripeCusId = user.getUserStripeMemberId();
+        if (stripeCusId == null || !stripeCusId.startsWith("cus_")) {
+            return ResponseEntity.badRequest().body("Invalid customer ID format");
+        }
+
+        // Fetch customer email from Stripe
+        String toEmail;
+        try {
+            Customer customer = Customer.retrieve(stripeCusId);
+            toEmail = customer.getEmail();
+            if (toEmail == null || toEmail.isEmpty()) {
+                return ResponseEntity.badRequest().body("No email found for customer ID: " + stripeCusId);
+            }
+        } catch (StripeException e) {
+            return ResponseEntity.status(400).body("Stripe error: " + e.getMessage());
+        }
+
+        // Prepare and send email
+        try {
+            MimeMessage message = mailSender.createMimeMessage();
+            MimeMessageHelper helper = new MimeMessageHelper(message, true);
+
+            // Testing link and feedback form link (replace with actual URLs)
+            String testingLink = "https://play.google.com/apps/test/com.cltliftingclub.app";
+            String feedbackFormLink = "https://forms.gle/your_form_link";
+            String contact = "support@cltliftingclub.com";
+
+            // Professional HTML email content for CLT Lifting Club
+            String htmlContent = """
+                <html>
+                <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333;">
+                    <h2>Test the CLT Lifting Club App</h2>
+                    <p>Dear Member,</p>
+                    <p>You’re invited to test the CLT Lifting Club app, launching on the Play Store soon! Your feedback will help us perfect it by June 23, 2025. Join today, June 9, 2025.</p>
+                    <p><a href="%s" style="background-color: #28a745; color: #fff; padding: 10px 20px; text-decoration: none; border-radius: 5px;">Join the Test Now</a></p>
+                    <p>Steps:<br>
+                    1. Click the link above.<br>
+                    2. Install the app from the Play Store (no “Unknown Sources” needed).<br>
+                    3. Log in with your membership credentials (contact %s if unsure).<br>
+                    4. Requires Android 8.0+.<br>
+                    5. Share feedback via this form: <a href="%s">%s</a> or reply to this email.</p>
+                    <p>As a tester, your input is crucial! Report bugs or suggestions to %s. We’ll update you on the Play Store release.</p>
+                    <p>Thank you for choosing CLT Lifting Club LLC!</p>
+                    <p>Best regards,<br>The CLT Lifting Team</p>
+                    <hr>
+                    <p style="font-size: 12px; color: #777;">CLT Lifting Club LLC, 3100 South Blvd, Charlotte, NC, USA</p>
+                </body>
+                </html>
+                """.formatted(testingLink, contact, feedbackFormLink, feedbackFormLink, contact);
+
+            helper.setTo(toEmail);
+            helper.setSubject("Test the CLT Lifting Club App for Play Store Launch – Join Now!");
+            helper.setText(htmlContent, true);
+            helper.setFrom("cltliftingclubtech@gmail.com");
+
+            mailSender.send(message);
+
+            return ResponseEntity.ok("Test email sent to " + toEmail);
+        } catch (MessagingException e) {
+            return ResponseEntity.status(500).body("Failed to send email: " + e.getMessage());
+        }
+    }
     @PostMapping("/update-payment-method")
     public Map<String, Object> updatePaymentMethod(@RequestBody Map<String, String> request) {
         Map<String, Object> response = new HashMap<>();
