@@ -647,6 +647,7 @@ public class StripeController {
 
             // Testing link and feedback form link (replace with actual URLs)
             String testingLink = "https://play.google.com/apps/test/com.adickinson.CltLiftingClub/1";
+            String internalTestingLink = "https://play.google.com/apps/internaltest/4700609801587188644";
 
             String contact = "support@cltliftingclub.com";
 
@@ -658,6 +659,7 @@ public class StripeController {
                     <p>Dear Member,</p>
                     <p>You’re invited to test the CLT Lifting Club app, launching on the Play Store soon!</p>
                     <p><a href="%s" style="background-color: #28a745; color: #fff; padding: 10px 20px; text-decoration: none; border-radius: 5px;">Join the Test Now</a></p>
+                    <p><a href="%s" style="background-color: #28a745; color: #fff; padding: 10px 20px; text-decoration: none; border-radius: 5px;">Join the Internal Test Now</a></p>
                     <p>Steps:<br>
                     1. Click the link above.<br>
                     2. Install the app from the Play Store (no “Unknown Sources” needed).<br>
@@ -669,7 +671,7 @@ public class StripeController {
                     <p style="font-size: 12px; color: #777;">CLT Lifting Club LLC, 3100 South Blvd, Charlotte, NC, USA</p>
                 </body>
                 </html>
-                """.formatted(testingLink, contact);
+                """.formatted(testingLink, internalTestingLink, contact);
 
             helper.setTo(toEmail);
             helper.setSubject("Test the CLT Lifting Club App for Play Store Launch – Join Now!");
