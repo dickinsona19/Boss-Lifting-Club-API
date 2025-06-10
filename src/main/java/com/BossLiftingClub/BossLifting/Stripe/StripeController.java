@@ -465,8 +465,6 @@ public class StripeController {
         invoice.finalizeInvoice();
 
 
-
-
         // Step 4: Create the subscription (without the application fee)
         SubscriptionCreateParams.Builder subscriptionBuilder = SubscriptionCreateParams.builder()
                 .setCustomer(customerId)
@@ -489,28 +487,19 @@ public class StripeController {
         System.out.println("Subscription created: " + subscription.getId());
 
 
+        LocalDate currentDateMaintanance = LocalDate.now();
+// Calculate the billing anchor 6 months in the future
+        LocalDate billingAnchorDate = currentDateMaintanance.plusMonths(6);
+        ZonedDateTime billingAnchorDateTime = billingAnchorDate.atStartOfDay(ZoneId.of("UTC"));
+        long billingAnchorTimestamp = billingAnchorDateTime.toEpochSecond();
 
-        // Maintenance subscription logic
-        LocalDate currentYearJanuaryBilling = LocalDate.of(currentDate.getYear(), 1, 1);
-        LocalDate currentYearJulyBilling = LocalDate.of(currentDate.getYear(), 7, 1);
-        boolean isBeforeJuly = currentDate.isBefore(currentYearJulyBilling) || currentDate.isEqual(currentYearJulyBilling);
-        LocalDate previousBillingDate = isBeforeJuly ? currentYearJanuaryBilling : currentYearJulyBilling;
-        long nextBillingMonth = isBeforeJuly ? 7L : 1L; // July 1 or January 1
-        long nextBillingDay = 1L;
-        int nextBillingYear = isBeforeJuly ? currentDate.getYear() : currentDate.getYear() + 1;
-
-        // Calculate trial end timestamp for next billing date
-        LocalDate nextBillingDate = LocalDate.of(nextBillingYear, (int) nextBillingMonth, (int) nextBillingDay);
-        ZonedDateTime nextBillingDateTime = nextBillingDate.atStartOfDay(ZoneId.of("UTC"));
-        long trialEndTimestamp = nextBillingDateTime.toEpochSecond();
-
-        // Validate trial end is in the future
+// Validate billing anchor is in the future
         long currentTimestamp = Instant.now().getEpochSecond();
-        if (trialEndTimestamp <= currentTimestamp) {
-            throw new IllegalArgumentException("Trial end timestamp must be in the future: " + nextBillingDate);
+        if (billingAnchorTimestamp <= currentTimestamp) {
+            throw new IllegalArgumentException("Billing anchor timestamp must be in the future: " + billingAnchorDate);
         }
 
-        // Create maintenance subscription with fee as a recurring item
+// Create maintenance subscription with delayed billing cycle
         SubscriptionCreateParams.Builder maintenanceParamsBuilder = SubscriptionCreateParams.builder()
                 .setCustomer(customerId)
                 .addItem(SubscriptionCreateParams.Item.builder()
@@ -519,14 +508,13 @@ public class StripeController {
                 .setDefaultPaymentMethod(paymentMethodId)
                 .setProrationBehavior(SubscriptionCreateParams.ProrationBehavior.NONE)
                 .addExpand("schedule")
-                .setTrialEnd(trialEndTimestamp)
+                .setBillingCycleAnchor(billingAnchorTimestamp)
                 .setTransferData(SubscriptionCreateParams.TransferData.builder()
                         .setDestination("acct_1RDvRj4gikNsBARu")
                         .setAmountPercent(new BigDecimal("4.0"))
                         .build());
 
-        System.out.println("Setting maintenance subscription with trial until " + nextBillingDate +
-                ", charging full $67.26 for period starting " + previousBillingDate);
+        System.out.println("Setting maintenance subscription with first charge on " + billingAnchorDate);
 
         try {
             Subscription maintenanceSubscription = Subscription.create(maintenanceParamsBuilder.build());
