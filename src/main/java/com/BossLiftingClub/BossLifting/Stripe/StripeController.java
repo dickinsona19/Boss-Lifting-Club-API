@@ -160,7 +160,16 @@ public class StripeController {
                     SubscriptionCollection subscriptions = Subscription.list(subscriptionParams);
 
                     if (!subscriptions.getData().isEmpty()) {
-                        Subscription referrerSubscription = subscriptions.getData().get(0);
+                        Subscription referrerSubscription = subscriptions.getData()
+                                .stream()
+                                .filter(sub -> sub.getItems().getData().stream()
+                                        .anyMatch(item -> {
+                                            String priceId = item.getPrice().getId();
+                                            return "price_1R6aIfGHcVHSTvgIlwN3wmyD".equals(priceId) ||
+                                                    "price_1RF313GHcVHSTvgI4HXgjwOA".equals(priceId);
+                                        }))
+                                .findFirst()
+                                .orElse(null);
 
                         // Check if subscription already has a coupon
                         if (referrerSubscription.getDiscount() != null && referrerSubscription.getDiscount().getCoupon() != null) {
