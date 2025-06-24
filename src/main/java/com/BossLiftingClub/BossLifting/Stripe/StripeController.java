@@ -462,9 +462,7 @@ public class StripeController {
 
         InvoiceItem invoiceItem = InvoiceItem.create(invoiceItemParams);
 
-        // Step 2: Create a transfer for the application fee to the destination account
-        // Since InvoiceItems don't support direct transfers, we'll need to handle this after the payment
-        // We'll finalize the invoice immediately to charge the customer
+        // Step 2: Create and finalize an invoice for the application fee
         com.stripe.model.Invoice invoice = com.stripe.model.Invoice.create(
                 com.stripe.param.InvoiceCreateParams.builder()
                         .setCustomer(customerId)
@@ -473,20 +471,15 @@ public class StripeController {
         );
         invoice.finalizeInvoice();
 
-
-        // Step 4: Create the subscription (without the application fee)
+        // Step 3: Create the subscription (without the application fee)
         SubscriptionCreateParams.Builder subscriptionBuilder = SubscriptionCreateParams.builder()
                 .setCustomer(customerId)
                 .addItem(SubscriptionCreateParams.Item.builder()
                         .setPrice(mainPriceId)
                         .build())
-                .setDefaultPaymentMethod(paymentMethodId)
-                .setTransferData(SubscriptionCreateParams.TransferData.builder()
-                        .setDestination("acct_1RDvRj4gikNsBARu")
-                        .setAmountPercent(new BigDecimal("4.0"))
-                        .build());
+                .setDefaultPaymentMethod(paymentMethodId);
 
-// Check if the membership price is not 948 before adding the tax rate
+        // Check if the membership price is not 948 before adding the tax rate
         if (!membershipPrice.equals("948.00")) {
             subscriptionBuilder.addDefaultTaxRate("txr_1RIsQGGHcVHSTvgIF3A1Nacp");
         }
@@ -495,20 +488,19 @@ public class StripeController {
 
         System.out.println("Subscription created: " + subscription.getId());
 
-
         LocalDate currentDateMaintanance = LocalDate.now();
-// Calculate the billing anchor 6 months in the future
+        // Calculate the billing anchor 6 months in the future
         LocalDate billingAnchorDate = currentDateMaintanance.plusMonths(6);
         ZonedDateTime billingAnchorDateTime = billingAnchorDate.atStartOfDay(ZoneId.of("UTC"));
         long billingAnchorTimestamp = billingAnchorDateTime.toEpochSecond();
 
-// Validate billing anchor is in the future
+        // Validate billing anchor is in the future
         long currentTimestamp = Instant.now().getEpochSecond();
         if (billingAnchorTimestamp <= currentTimestamp) {
             throw new IllegalArgumentException("Billing anchor timestamp must be in the future: " + billingAnchorDate);
         }
 
-// Create maintenance subscription with delayed billing cycle
+        // Create maintenance subscription with delayed billing cycle
         SubscriptionCreateParams.Builder maintenanceParamsBuilder = SubscriptionCreateParams.builder()
                 .setCustomer(customerId)
                 .addItem(SubscriptionCreateParams.Item.builder()
@@ -517,11 +509,7 @@ public class StripeController {
                 .setDefaultPaymentMethod(paymentMethodId)
                 .setProrationBehavior(SubscriptionCreateParams.ProrationBehavior.NONE)
                 .addExpand("schedule")
-                .setBillingCycleAnchor(billingAnchorTimestamp)
-                .setTransferData(SubscriptionCreateParams.TransferData.builder()
-                        .setDestination("acct_1RDvRj4gikNsBARu")
-                        .setAmountPercent(new BigDecimal("4.0"))
-                        .build());
+                .setBillingCycleAnchor(billingAnchorTimestamp);
 
         System.out.println("Setting maintenance subscription with first charge on " + billingAnchorDate);
 
@@ -722,5 +710,49 @@ public class StripeController {
             put("clientSecret", setupIntent.getClientSecret());
         }};
     }
+
+    @PostMapping("/{customerId}/remove-transfers")
+    public ResponseEntity<String> removeTransferData(@PathVariable String customerId) {
+        try {
+            // Validate customer exists
+            com.stripe.model.Customer customer = com.stripe.model.Customer.retrieve(customerId);
+            if (customer.getDeleted() != null && customer.getDeleted()) {
+                return ResponseEntity.badRequest().body("Customer is deleted: " + customerId);
+            }
+
+            // Retrieve all subscriptions for the customer
+            SubscriptionListParams listParams = SubscriptionListParams.builder()
+                    .setCustomer(customerId)
+                    .build();
+
+            Iterable<Subscription> subscriptions = Subscription.list(listParams).autoPagingIterable();
+
+            int updatedCount = 0;
+            for (Subscription subscription : subscriptions) {
+                // Check if subscription has transfer_data
+                if (subscription.getTransferData() != null) {
+                    // Update subscription to remove transfer_data
+                    SubscriptionUpdateParams updateParams = SubscriptionUpdateParams.builder()
+                            .setTransferData(SubscriptionUpdateParams.TransferData.builder().build()) // Empty transfer_data clears it
+                            .build();
+
+                    Subscription updatedSubscription = subscription.update(updateParams);
+                    System.out.println("Removed transfer_data from subscription: " + updatedSubscription.getId());
+                    updatedCount++;
+                }
+            }
+
+            if (updatedCount == 0) {
+                return ResponseEntity.ok("No subscriptions with transfer_data found for customer: " + customerId);
+            }
+
+            return ResponseEntity.ok("Successfully removed transfer_data from " + updatedCount + " subscriptions for customer: " + customerId);
+
+        } catch (StripeException e) {
+            System.err.println("Failed to process subscriptions for customer " + customerId + ": " + e.getMessage() + "; request-id: " + e.getRequestId());
+            return ResponseEntity.status(500).body("Error processing subscriptions: " + e.getMessage());
+        }
+    }
+}
 
 }
