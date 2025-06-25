@@ -732,11 +732,10 @@ public class StripeController {
                 // Check if subscription has transfer_data
                 if (subscription.getTransferData() != null) {
                     // Update subscription to remove transfer_data
-                    SubscriptionUpdateParams updateParams = SubscriptionUpdateParams.builder()
-                            .setTransferData(SubscriptionUpdateParams.TransferData.builder().build()) // Empty transfer_data clears it
-                            .build();
+                    Map<String, Object> params = new HashMap<>();
+                    params.put("transfer_data", null); // Explicitly set transfer_data to null
 
-                    Subscription updatedSubscription = subscription.update(updateParams);
+                    Subscription updatedSubscription = subscription.update(params);
                     System.out.println("Removed transfer_data from subscription: " + updatedSubscription.getId());
                     updatedCount++;
                 }
@@ -751,6 +750,74 @@ public class StripeController {
         } catch (StripeException e) {
             System.err.println("Failed to process subscriptions for customer " + customerId + ": " + e.getMessage() + "; request-id: " + e.getRequestId());
             return ResponseEntity.status(500).body("Error processing subscriptions: " + e.getMessage());
+        }
+    }
+    @PostMapping("/remove-transfers-all-users")
+    public ResponseEntity<String> removeTransferDataForAllUsers() {
+        try {
+            // Retrieve all users from the database
+            Iterable<User> users = userRepository.findAll();
+            int totalUpdatedCount = 0;
+            int processedUsers = 0;
+
+            for (User user : users) {
+                String customerId = user.getUserStripeMemberId();
+                if (customerId == null || customerId.isEmpty()) {
+                    System.out.println("Skipping user with no StripeCustomerId: " + user.getId());
+                    continue;
+                }
+
+                // Validate customer exists
+                Customer customer;
+                try {
+                    customer = Customer.retrieve(customerId);
+                } catch (StripeException e) {
+                    System.err.println("Failed to retrieve customer " + customerId + ": " + e.getMessage() + "; request-id: " + e.getRequestId());
+                    continue; // Skip to next user
+                }
+
+                if (customer.getDeleted() != null && customer.getDeleted()) {
+                    System.out.println("Customer is deleted: " + customerId);
+                    continue;
+                }
+
+                // Retrieve all subscriptions for the customer
+                SubscriptionListParams listParams = SubscriptionListParams.builder()
+                        .setCustomer(customerId)
+                        .build();
+
+                Iterable<Subscription> subscriptions = Subscription.list(listParams).autoPagingIterable();
+                int updatedCount = 0;
+
+                for (Subscription subscription : subscriptions) {
+                    // Check if subscription has transfer_data
+                    if (subscription.getTransferData() != null) {
+                        // Update subscription to remove transfer_data
+                        Map<String, Object> params = new HashMap<>();
+                        params.put("transfer_data", null); // Explicitly set transfer_data to null
+
+                        Subscription updatedSubscription = subscription.update(params);
+                        System.out.println("Removed transfer_data from subscription: " + updatedSubscription.getId() + " for customer: " + customerId);
+                        updatedCount++;
+                    }
+                }
+
+                if (updatedCount > 0) {
+                    totalUpdatedCount += updatedCount;
+                    processedUsers++;
+                    System.out.println("Processed customer " + customerId + " with " + updatedCount + " subscriptions updated");
+                }
+            }
+
+            if (totalUpdatedCount == 0) {
+                return ResponseEntity.ok("No subscriptions with transfer_data found for any users");
+            }
+
+            return ResponseEntity.ok("Successfully removed transfer_data from " + totalUpdatedCount + " subscriptions across " + processedUsers + " users");
+
+        } catch (Exception e) {
+            System.err.println("Failed to process users: " + e.getMessage());
+            return ResponseEntity.status(500).body("Error processing users: " + e.getMessage());
         }
     }
 }
