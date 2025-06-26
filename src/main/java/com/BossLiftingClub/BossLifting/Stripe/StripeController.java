@@ -159,7 +159,9 @@ public class StripeController {
                             .build();
                     SubscriptionCollection subscriptions = Subscription.list(subscriptionParams);
 
-                    if (!subscriptions.getData().isEmpty()) {
+                    if (subscriptions.getData().isEmpty()) {
+                        System.err.println("No subscriptions found for referrer with Stripe ID: " + referrerStripeId);
+                    } else {
                         Subscription referrerSubscription = subscriptions.getData()
                                 .stream()
                                 .filter(sub -> sub.getItems().getData().stream()
@@ -171,48 +173,54 @@ public class StripeController {
                                 .findFirst()
                                 .orElse(null);
 
-                        // Check if subscription already has a coupon
-                        if (referrerSubscription.getDiscount() != null && referrerSubscription.getDiscount().getCoupon() != null) {
-                            // Extend existing coupon duration by 1 month
-                            Coupon existingCoupon = referrerSubscription.getDiscount().getCoupon();
-                            Long newDurationInMonths = 1L; // Default to 1 month if no duration specified
-                            if (existingCoupon.getDurationInMonths() != null) {
-                                newDurationInMonths = existingCoupon.getDurationInMonths() + 1;
-                            }
-
-                            // Create a new coupon with extended duration
-                            CouponCreateParams couponParams = CouponCreateParams.builder()
-                                    .setPercentOff(BigDecimal.valueOf(100.0))
-                                    .setDuration(CouponCreateParams.Duration.REPEATING)
-                                    .setDurationInMonths(newDurationInMonths)
-                                    .setName("Extended Referral Discount")
-                                    .build();
-                            Coupon newCoupon = Coupon.create(couponParams);
-
-                            // Update subscription with new coupon
-                            SubscriptionUpdateParams updateParams = SubscriptionUpdateParams.builder()
-                                    .setCoupon(newCoupon.getId())
-                                    .build();
-                            Subscription updatedSubscription = referrerSubscription.update(updateParams);
-                            System.out.println("Extended coupon applied to referrer's subscription: " + updatedSubscription.getId());
+                        if (referrerSubscription == null) {
+                            System.err.println("No matching subscription found for referrer with Stripe ID: " + referrerStripeId);
                         } else {
-                            // Create a new 100% off coupon for 1 month
-                            CouponCreateParams couponParams = CouponCreateParams.builder()
-                                    .setPercentOff(BigDecimal.valueOf(100.0))
-                                    .setDuration(CouponCreateParams.Duration.REPEATING)
-                                    .setDurationInMonths(1L)
-                                    .setName("Referral Discount")
-                                    .build();
-                            Coupon coupon = Coupon.create(couponParams);
+                            // Check if subscription already has a coupon
+                            if (referrerSubscription.getDiscount() != null && referrerSubscription.getDiscount().getCoupon() != null) {
+                                // Extend existing coupon duration by 1 month
+                                Coupon existingCoupon = referrerSubscription.getDiscount().getCoupon();
+                                Long newDurationInMonths = 1L; // Default to 1 month if no duration specified
+                                if (existingCoupon.getDurationInMonths() != null) {
+                                    newDurationInMonths = existingCoupon.getDurationInMonths() + 1;
+                                }
 
-                            // Apply the coupon to the referrer's subscription
-                            SubscriptionUpdateParams updateParams = SubscriptionUpdateParams.builder()
-                                    .setCoupon(coupon.getId())
-                                    .build();
-                            Subscription updatedSubscription = referrerSubscription.update(updateParams);
-                            System.out.println("Coupon applied to referrer's subscription: " + updatedSubscription.getId());
+                                // Create a new coupon with extended duration
+                                CouponCreateParams couponParams = CouponCreateParams.builder()
+                                        .setPercentOff(BigDecimal.valueOf(100.0))
+                                        .setDuration(CouponCreateParams.Duration.REPEATING)
+                                        .setDurationInMonths(newDurationInMonths)
+                                        .setName("Extended Referral Discount")
+                                        .build();
+                                Coupon newCoupon = Coupon.create(couponParams);
+
+                                // Update subscription with new coupon
+                                SubscriptionUpdateParams updateParams = SubscriptionUpdateParams.builder()
+                                        .setCoupon(newCoupon.getId())
+                                        .build();
+                                Subscription updatedSubscription = referrerSubscription.update(updateParams);
+                                System.out.println("Extended coupon applied to referrer's subscription: " + updatedSubscription.getId());
+                            } else {
+                                // Create a new 100% off coupon for 1 month
+                                CouponCreateParams couponParams = CouponCreateParams.builder()
+                                        .setPercentOff(BigDecimal.valueOf(100.0))
+                                        .setDuration(CouponCreateParams.Duration.REPEATING)
+                                        .setDurationInMonths(1L)
+                                        .setName("Referral Discount")
+                                        .build();
+                                Coupon coupon = Coupon.create(couponParams);
+
+                                // Apply the coupon to the referrer's subscription
+                                SubscriptionUpdateParams updateParams = SubscriptionUpdateParams.builder()
+                                        .setCoupon(coupon.getId())
+                                        .build();
+                                Subscription updatedSubscription = referrerSubscription.update(updateParams);
+                                System.out.println("Coupon applied to referrer's subscription: " + updatedSubscription.getId());
+                            }
                         }
                     }
+                } else {
+                    System.err.println("Referrer has no Stripe ID associated.");
                 }
             } catch (StripeException e) {
                 System.err.println("Error applying referral coupon: " + e.getMessage());
