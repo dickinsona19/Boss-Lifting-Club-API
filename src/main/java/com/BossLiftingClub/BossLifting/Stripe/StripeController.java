@@ -167,8 +167,7 @@ public class StripeController {
                                 .filter(sub -> sub.getItems().getData().stream()
                                         .anyMatch(item -> {
                                             String priceId = item.getPrice().getId();
-                                            return "price_1R6aIfGHcVHSTvgIlwN3wmyD".equals(priceId) ||
-                                                    "price_1RF313GHcVHSTvgI4HXgjwOA".equals(priceId);
+                                            return !"price_1RF30SGHcVHSTvgIpegCzQ0m".equals(priceId);
                                         }))
                                 .findFirst()
                                 .orElse(null);
