@@ -48,8 +48,8 @@ INSERT INTO membership (name, price, charge_interval) VALUES
 
 
 
-INSERT INTO users (first_name, last_name, password, phone_number, is_in_good_standing, entry_qrcode_token, user_title_id, membership_id, referral_code, referred_by_id)
-VALUES ('Andrew', 'Dickinson', '$2a$10$3aKCw124a.sRwxdI98rUMuiiSolKeK.SbSNFii4fPHgnRSSxvcZMq', '8124473167', TRUE, '123QASDFD32', 1, 3, '1243ff2ds23', NULL);
+INSERT INTO users (first_name, last_name, password, phone_number, is_in_good_standing, entry_qrcode_token, user_title_id, membership_id, referral_code, referred_by_id, user_stripe_member_id)
+VALUES ('Andrew', 'Dickinson', '$2a$10$3aKCw124a.sRwxdI98rUMuiiSolKeK.SbSNFii4fPHgnRSSxvcZMq', '8124473166', TRUE, '123QASDFD32', 1, 3, '1243ff2ds23', NULL, 'cus_SdLAbAKZOt0Bjq');
 
 -- Insert Alice, referred by Andrew (using his referral_code '1243ff2ds')
 INSERT INTO users (first_name, last_name, password, phone_number, is_in_good_standing, entry_qrcode_token, user_title_id, membership_id, referral_code, referred_by_id)
