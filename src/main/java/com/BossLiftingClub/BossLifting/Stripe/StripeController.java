@@ -528,27 +528,6 @@ public class StripeController {
             throw e;
         }
     }
-    @PostMapping("/update-subscription-transfer")
-    public String updateSubscriptionTransferData(@RequestParam String subId) {
-        try {
-            // Step 1: Retrieve the subscription
-            Subscription subscription = Subscription.retrieve(subId);
-
-            // Step 2: Update the subscription with new transfer_data
-            Map<String, Object> params = new HashMap<>();
-            Map<String, Object> transferData = new HashMap<>();
-            transferData.put("destination", "acct_1RDvRj4gikNsBARu");
-            transferData.put("amount_percent", 4);
-            params.put("transfer_data", transferData);
-
-            Subscription updatedSubscription = subscription.update(params);
-
-            return "Subscription transfer data updated successfully. Subscription ID: " + updatedSubscription.getId();
-
-        } catch (StripeException e) {
-            return "Error: " + e.getMessage();
-        }
-    }
 
 
 
@@ -597,7 +576,7 @@ public class StripeController {
             helper.setTo(toEmail);
             helper.setSubject(subject);
             helper.setText(htmlContent, true);
-            helper.setFrom("cltliftingclubtech@gmail.com");
+            helper.setFrom("contact@cltliftingclub.com");
 
             mailSender.send(message);
 
@@ -641,7 +620,7 @@ public class StripeController {
             String testingLink = "https://play.google.com/store/apps/details?id=com.adickinson.CltLiftingClub";
             String internalTestingLink = "https://play.google.com/apps/internaltest/4700609801587188644";
 
-            String contact = "support@cltliftingclub.com";
+            String contact = "contact@cltliftingclub.com";
 
             // Professional HTML email content for CLT Lifting Club
             String htmlContent = """
@@ -668,7 +647,7 @@ public class StripeController {
             helper.setTo(toEmail);
             helper.setSubject("Test the CLT Lifting Club App for Play Store Launch – Join Now!");
             helper.setText(htmlContent, true);
-            helper.setFrom("cltliftingclubtech@gmail.com");
+            helper.setFrom("contact@cltliftingclub.com");
 
             mailSender.send(message);
 
@@ -718,113 +697,111 @@ public class StripeController {
         }};
     }
 
-    @PostMapping("/{customerId}/remove-transfers")
-    public ResponseEntity<String> removeTransferData(@PathVariable String customerId) {
-        try {
-            // Validate customer exists
-            com.stripe.model.Customer customer = com.stripe.model.Customer.retrieve(customerId);
-            if (customer.getDeleted() != null && customer.getDeleted()) {
-                return ResponseEntity.badRequest().body("Customer is deleted: " + customerId);
-            }
 
-            // Retrieve all subscriptions for the customer
-            SubscriptionListParams listParams = SubscriptionListParams.builder()
-                    .setCustomer(customerId)
-                    .build();
+    @PostMapping("/{StripeCusId}/add-child")
+    public ResponseEntity<UserDTO> addChildToParent(@PathVariable String StripeCusId, @RequestBody User childUser) {
+        Optional<User> parentlUser = userRepository.findByUserStripeMemberId(StripeCusId);
+        UserDTO updatedChild = userService.addChildToParent(parentlUser.get().getId(), childUser);
+        String newPriceId = "price_1RjLIeGHcVHSTvgIIWXgBxPK";
+        String targetPriceId = "price_1RF30SGHcVHSTvgIpegCzQ0m";
 
-            Iterable<Subscription> subscriptions = Subscription.list(listParams).autoPagingIterable();
-
-            int updatedCount = 0;
-            for (Subscription subscription : subscriptions) {
-                // Check if subscription has transfer_data
-                if (subscription.getTransferData() != null) {
-                    // Update subscription to remove transfer_data
-                    Map<String, Object> params = new HashMap<>();
-                    params.put("transfer_data", null); // Explicitly set transfer_data to null
-
-                    Subscription updatedSubscription = subscription.update(params);
-                    System.out.println("Removed transfer_data from subscription: " + updatedSubscription.getId());
-                    updatedCount++;
-                }
-            }
-
-            if (updatedCount == 0) {
-                return ResponseEntity.ok("No subscriptions with transfer_data found for customer: " + customerId);
-            }
-
-            return ResponseEntity.ok("Successfully removed transfer_data from " + updatedCount + " subscriptions for customer: " + customerId);
-
-        } catch (StripeException e) {
-            System.err.println("Failed to process subscriptions for customer " + customerId + ": " + e.getMessage() + "; request-id: " + e.getRequestId());
-            return ResponseEntity.status(500).body("Error processing subscriptions: " + e.getMessage());
-        }
-    }
-    @PostMapping("/remove-transfers-all-users")
-    public ResponseEntity<String> removeTransferDataForAllUsers() {
-        try {
-            // Retrieve all users from the database
-            Iterable<User> users = userRepository.findAll();
-            int totalUpdatedCount = 0;
-            int processedUsers = 0;
-
-            for (User user : users) {
-                String customerId = user.getUserStripeMemberId();
-                if (customerId == null || customerId.isEmpty()) {
-                    System.out.println("Skipping user with no StripeCustomerId: " + user.getId());
-                    continue;
-                }
-
-                // Validate customer exists
-                Customer customer;
-                try {
-                    customer = Customer.retrieve(customerId);
-                } catch (StripeException e) {
-                    System.err.println("Failed to retrieve customer " + customerId + ": " + e.getMessage() + "; request-id: " + e.getRequestId());
-                    continue; // Skip to next user
-                }
-
-                if (customer.getDeleted() != null && customer.getDeleted()) {
-                    System.out.println("Customer is deleted: " + customerId);
-                    continue;
-                }
-
-                // Retrieve all subscriptions for the customer
+        // Create Stripe subscription using parent's customer ID
+        if (parentlUser.get().getUserStripeMemberId() != null) {
+            try {
+                // Retrieve the parent's subscriptions
                 SubscriptionListParams listParams = SubscriptionListParams.builder()
-                        .setCustomer(customerId)
+                        .setCustomer(StripeCusId)
                         .build();
+                StripeCollection<Subscription> subscriptions = Subscription.list(listParams);
 
-                Iterable<Subscription> subscriptions = Subscription.list(listParams).autoPagingIterable();
-                int updatedCount = 0;
-
-                for (Subscription subscription : subscriptions) {
-                    // Check if subscription has transfer_data
-                    if (subscription.getTransferData() != null) {
-                        // Update subscription to remove transfer_data
-                        Map<String, Object> params = new HashMap<>();
-                        params.put("transfer_data", null); // Explicitly set transfer_data to null
-
-                        Subscription updatedSubscription = subscription.update(params);
-                        System.out.println("Removed transfer_data from subscription: " + updatedSubscription.getId() + " for customer: " + customerId);
-                        updatedCount++;
+                // Loop through subscriptions to find the one with the target price ID
+                Long billingCycleAnchor = null;
+                for (Subscription subscription : subscriptions.getData()) {
+                    for (SubscriptionItem item : subscription.getItems().getData()) {
+                        if (!targetPriceId.equals(item.getPrice().getId())) {
+                            billingCycleAnchor = subscription.getCurrentPeriodEnd();
+                            break;
+                        }
+                    }
+                    if (billingCycleAnchor != null) {
+                        break;
                     }
                 }
 
-                if (updatedCount > 0) {
-                    totalUpdatedCount += updatedCount;
-                    processedUsers++;
-                    System.out.println("Processed customer " + customerId + " with " + updatedCount + " subscriptions updated");
+                // Check if the target subscription was found
+                if (billingCycleAnchor == null) {
+                    throw new RuntimeException("No subscription found with price ID: " + targetPriceId);
                 }
+
+                // Create new subscription with aligned billing cycle anchor and trial
+                Subscription subscription = Subscription.create(
+                        SubscriptionCreateParams.builder()
+                                .setCustomer(StripeCusId)
+                                .addItem(
+                                        SubscriptionCreateParams.Item.builder()
+                                                .setPrice(newPriceId)
+                                                .build()
+                                )
+                                .setBillingCycleAnchor(billingCycleAnchor)
+                                .setTrialEnd(billingCycleAnchor) // No payment until anchor date
+                                // Proration is allowed by default for anchored invoice
+                                .build()
+                );
+
+                // Optionally store subscription ID in the child user if needed
+                // childUser.setUserStripeMemberId(subscription.getId());
+                // userRepository.save(childUser);
+            } catch (StripeException e) {
+                throw new RuntimeException("Failed to create Stripe subscription: " + e.getMessage(), e);
             }
+        } else {
+            throw new IllegalArgumentException("Parent must have a Stripe customer ID.");
+        }
+        return ResponseEntity.ok(updatedChild);
+    }
 
-            if (totalUpdatedCount == 0) {
-                return ResponseEntity.ok("No subscriptions with transfer_data found for any users");
-            }
+    @PostMapping("/{userId}/sendFamilyInviteEmail")
+    public ResponseEntity<String> sendFamilyPlanEmail(@PathVariable String userId, @RequestParam String newCusEmail) {
 
-            return ResponseEntity.ok("Successfully removed transfer_data from " + totalUpdatedCount + " subscriptions across " + processedUsers + " users");
 
-        } catch (Exception e) {
-            System.err.println("Failed to process users: " + e.getMessage());
-            return ResponseEntity.status(500).body("Error processing users: " + e.getMessage());
+        try {
+
+
+            // Prepare and send email
+            MimeMessage message = mailSender.createMimeMessage();
+            MimeMessageHelper helper = new MimeMessageHelper(message, true);
+
+            // Hardcoded password reset link with userId
+            String inviteLink = "https://www.cltliftingclub.com/signup?contract=Family&userId=" + userId;
+
+            // Professional email content for Clt Lifting
+            String subject = "Add to Family plan";
+            String htmlContent = """
+<body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333;">
+    <h2>You’ve Been Invited to Join a Family Plan</h2>
+    <p>Dear Member,</p>
+    <p>You’ve been invited to join a family plan for your CLT Lifting Club LLC account. To accept the invitation and activate your membership, click the link below:</p>
+    <p><a href="%s" style="background-color: #007bff; color: #fff; padding: 10px 20px; text-decoration: none; border-radius: 5px;">Join the Family Plan</a></p>
+    <p>If you were not expecting this invitation or believe it was sent in error, please ignore this email or contact our support team at support@cltlifting.com.</p>
+    <p>We’re excited to have you as part of the CLT Lifting Club family!</p>
+    <p>Best regards,<br>The CLT Lifting Team</p>
+    <hr>
+    <p style="font-size: 12px; color: #777;">CLT Lifting Club LLC, 3100 South Blvd, Charlotte, NC, USA</p>
+</body>
+</html>
+""".formatted(inviteLink);
+
+            helper.setTo(newCusEmail);
+            helper.setSubject(subject);
+            helper.setText(htmlContent, true);
+            helper.setFrom("contact@cltliftingclub.com");
+
+            mailSender.send(message);
+
+            return ResponseEntity.ok("Password reset email sent to " + newCusEmail);
+
+        } catch (MessagingException e) {
+            return ResponseEntity.status(500).body("Failed to send email: " + e.getMessage());
         }
     }
 }

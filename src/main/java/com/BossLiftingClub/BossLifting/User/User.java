@@ -2,7 +2,9 @@ package com.BossLiftingClub.BossLifting.User;
 
 import com.BossLiftingClub.BossLifting.User.Membership.Membership;
 import com.BossLiftingClub.BossLifting.User.UserTitles.UserTitles;
+import com.fasterxml.jackson.annotation.JsonBackReference;
 import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.fasterxml.jackson.annotation.JsonManagedReference;
 import jakarta.persistence.*;
 
 import java.time.LocalDateTime;
@@ -65,28 +67,48 @@ public class User {
     private String referralCode;
 
     @ManyToOne
+    @JoinColumn(name = "parent_id")
+    @JsonIgnore
+    private User parent;
+
+    @OneToMany(mappedBy = "parent", cascade = CascadeType.ALL, orphanRemoval = true)
+    @JsonIgnore
+    private Set<User> children = new HashSet<>();
+    @Transient
+    private Set<UserDTO> childrenDto;
+
+    @ManyToOne
     @JoinColumn(name = "referred_by_id")
     private User referredBy;
+
 
     @OneToMany(mappedBy = "referredBy", cascade = CascadeType.ALL, orphanRemoval = true)
     private Set<User> referredMembers = new HashSet<>();
     @Transient
     private Set<ReferredUserDto> referredMembersDto;
 
-    // Method to populate the DTO set
     @PostLoad
     @PostPersist
     @PostUpdate
-    private void populateReferredMembersDto() {
+    private void populateRelationshipDtos() {
+        this.childrenDto = children.stream()
+                .map(user -> new UserDTO(user))
+                .collect(Collectors.toSet());
         this.referredMembersDto = referredMembers.stream()
                 .map(user -> new ReferredUserDto(user))
                 .collect(Collectors.toSet());
     }
 
-    // Optional: Getter to ensure DTOs are populated if not already
+    public Set<UserDTO> getChildrenDto() {
+        if (childrenDto == null) {
+            populateRelationshipDtos();
+        }
+        return childrenDto;
+    }
+
     public Set<ReferredUserDto> getReferredMembersDto() {
         if (referredMembersDto == null) {
-            populateReferredMembersDto();
+            populateRelationshipDtos();
         }
         return referredMembersDto;
     }
@@ -224,4 +246,20 @@ public class User {
     public void setLockedInRate(String lockedInRate) {
         this.lockedInRate = lockedInRate;
     }
+    public User getParent() {
+        return parent;
+    }
+
+    public void setParent(User parent) {
+        this.parent = parent;
+    }
+
+    public Set<User> getChildren() {
+        return children;
+    }
+
+    public void setChildren(Set<User> children) {
+        this.children = children;
+    }
+
 }

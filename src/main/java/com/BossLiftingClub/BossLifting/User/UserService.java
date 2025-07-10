@@ -23,4 +23,5 @@ public interface UserService {
     Optional<User> updateWaiverSignature(Long userId, String imageUrl);
     boolean updateReferralCode(String referralCode, String newReferralCode);
     User updateUserOver18(long userId);
+    UserDTO addChildToParent(Long parentId, User user);
 }

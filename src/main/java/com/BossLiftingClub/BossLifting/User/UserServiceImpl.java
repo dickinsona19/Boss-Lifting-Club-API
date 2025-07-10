@@ -1,6 +1,7 @@
 package com.BossLiftingClub.BossLifting.User;
 
 
+import jakarta.persistence.EntityNotFoundException;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -9,6 +10,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.security.SecureRandom;
 import java.time.LocalDateTime;
 import java.util.*;
+import java.util.stream.Collectors;
 
 @Service
 public class UserServiceImpl implements UserService {
@@ -107,6 +109,11 @@ public class UserServiceImpl implements UserService {
     public Optional<User> deleteUserWithPhoneNumber(String phoneNumber) {
         Optional<User> userOpt = userRepository.findByPhoneNumber(phoneNumber);
         if (userOpt.isPresent()) {
+            if (userOpt.get().getParent() != null) {
+                User parent = userOpt.get().getParent();
+                parent.getChildren().remove(userOpt.get());
+                userRepository.save(parent);
+            }
             userRepository.delete(userOpt.get());
             return userOpt; // Return the deleted user
         }
@@ -198,5 +205,38 @@ public class UserServiceImpl implements UserService {
         user.setIsOver18(true);
         return userRepository.save(user);
     }
+    @Override
+    public UserDTO addChildToParent(Long parentId, User user) {
+        // Encode password
+        String encodedPassword = passwordEncoder.encode(user.getPassword());
+        user.setPassword(encodedPassword);
 
+        // Generate unique QR code token
+        String token = generateUniqueToken(10);
+        while (userRepository.findByEntryQrcodeToken(token).isPresent()) {
+            token = generateUniqueToken(10); // Regenerate if not unique
+        }
+        user.setEntryQrcodeToken(token);
+        user.setReferralCode(generateUniqueReferralCode());
+
+        // Save user with token
+        User child = userRepository.save(user);
+        User parent = userRepository.findById(parentId)
+                .orElseThrow(() -> new EntityNotFoundException("Parent user not found with ID: " + parentId));
+
+        child.setParent(parent);
+        parent.getChildren().add(child);
+
+        userRepository.save(parent);
+        userRepository.save(child);
+
+        return new UserDTO(child);
+    }
+
+    public List<UserDTO> getAllUsers() {
+        List<User> users = userRepository.findAll();
+        return users.stream()
+                .map(UserDTO::new)
+                .collect(Collectors.toList());
+    }
 }
