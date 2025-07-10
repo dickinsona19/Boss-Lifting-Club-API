@@ -15,7 +15,7 @@ public class EmailService {
     public String sendEmail(String to, String subject, String text) {
         try {
             SimpleMailMessage message = new SimpleMailMessage();
-            message.setFrom("cltliftingtech@gmail.com");
+            message.setFrom("contact@cltliftingclub.com");
             message.setTo(to);
             message.setSubject(subject);
             message.setText(text);

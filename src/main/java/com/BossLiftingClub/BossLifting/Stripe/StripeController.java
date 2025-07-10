@@ -439,11 +439,11 @@ public class StripeController {
         String mainFeePriceId;
         switch (membershipPrice) {
             case "89.99":
-                mainPriceId = "price_1RiiGA4PBwB8fzGsF7QQrReP";
+                mainPriceId = "price_1R6aIfGHcVHSTvgIlwN3wmyD";
                 mainFeePriceId = "price_1RF4FpGHcVHSTvgIKM8Jilwl"; // $3.60
                 break;
             case "99.99":
-                mainPriceId = "price_1RiiGA4PBwB8fzGsF7QQrReP";
+                mainPriceId = "price_1RF313GHcVHSTvgI4HXgjwOA";
                 mainFeePriceId = "price_1RF4GlGHcVHSTvgIVojlVrn7"; // $4.00
                 break;
             case "109.99":
@@ -458,7 +458,7 @@ public class StripeController {
         }
 
         // Application fee Price ID (one-time)
-        String applicationFeePriceId = "price_1RJKS44PBwB8fzGsFAkRs5Tk"; // One-time application fee Price ID
+        String applicationFeePriceId = "price_1RJOFhGHcVHSTvgI08VPh4XY"; // One-time application fee Price ID
 
         // Step 1: Create a one-time InvoiceItem for the application fee
         InvoiceItemCreateParams invoiceItemParams = InvoiceItemCreateParams.builder()
@@ -488,7 +488,7 @@ public class StripeController {
 
         // Check if the membership price is not 948 before adding the tax rate
         if (!membershipPrice.equals("948.00")) {
-            subscriptionBuilder.addDefaultTaxRate("txr_1RJKTd4PBwB8fzGsU5TETSdQ");
+            subscriptionBuilder.addDefaultTaxRate("txr_1RIsQGGHcVHSTvgIF3A1Nacp");
         }
         SubscriptionCreateParams subscriptionParams = subscriptionBuilder.build();
         Subscription subscription = Subscription.create(subscriptionParams);
@@ -511,7 +511,7 @@ public class StripeController {
         SubscriptionCreateParams.Builder maintenanceParamsBuilder = SubscriptionCreateParams.builder()
                 .setCustomer(customerId)
                 .addItem(SubscriptionCreateParams.Item.builder()
-                        .setPrice("price_1RUDVU4PBwB8fzGsTD886R8V") // $59.99
+                        .setPrice("price_1RF30SGHcVHSTvgIpegCzQ0m") // $59.99
                         .build())
                 .setDefaultPaymentMethod(paymentMethodId)
                 .setProrationBehavior(SubscriptionCreateParams.ProrationBehavior.NONE)
@@ -702,8 +702,8 @@ public class StripeController {
     public ResponseEntity<UserDTO> addChildToParent(@PathVariable String StripeCusId, @RequestBody User childUser) {
         Optional<User> parentlUser = userRepository.findByUserStripeMemberId(StripeCusId);
         UserDTO updatedChild = userService.addChildToParent(parentlUser.get().getId(), childUser);
-        String newPriceId = "price_1RiiBL4PBwB8fzGs1cZApsbJ";
-        String targetPriceId = "price_1RiiGA4PBwB8fzGsF7QQrReP";
+        String newPriceId = "price_1RjLIeGHcVHSTvgIIWXgBxPK";
+        String targetPriceId = "price_1RF30SGHcVHSTvgIpegCzQ0m";
 
         // Create Stripe subscription using parent's customer ID
         if (parentlUser.get().getUserStripeMemberId() != null) {
