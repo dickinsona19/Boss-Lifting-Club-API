@@ -8,6 +8,7 @@ public class UserRequest {
     private String membershipName;
     private Long   referralId;
     private String lockedInRate;
+    private String promoToken;
 
     // Getters and setters
     public String getFirstName() { return firstName; }
@@ -39,5 +40,13 @@ public class UserRequest {
 
     public void setLockedInRate(String lockedInRate) {
         this.lockedInRate = lockedInRate;
+    }
+
+    public String getPromoToken() {
+        return promoToken;
+    }
+
+    public void setPromoToken(String promoToken) {
+        this.promoToken = promoToken;
     }
 }

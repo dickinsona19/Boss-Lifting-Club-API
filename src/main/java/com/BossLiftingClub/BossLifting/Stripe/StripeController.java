@@ -1,5 +1,6 @@
 package com.BossLiftingClub.BossLifting.Stripe;
 
+import com.BossLiftingClub.BossLifting.Promo.PromoService;
 import com.BossLiftingClub.BossLifting.Stripe.ProcessedEvent.EventService;
 import com.BossLiftingClub.BossLifting.Stripe.RequestsAndResponses.*;
 import com.BossLiftingClub.BossLifting.Stripe.Transfers.TransferService;
@@ -33,10 +34,7 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
 import java.time.ZonedDateTime;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Optional;
+import java.util.*;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -51,9 +49,10 @@ public class StripeController {
     private final String webhookSubscriptionSecret;
     private final EventService eventService;
     private final TransferService transferService;
+    private final PromoService promoService;
     @Autowired
     private JavaMailSender mailSender;
-    public StripeController(EventService eventService, TransferService transferService, UserService userService, StripeService stripeService, @Value("${stripe.webhook.secret}") String webhookSecret, @Value("${stripe.webhook.subscriptionSecret}") String webhookSubscriptionSecret, UserTitlesRepository userTitlesRepository, MembershipRepository membershipRepository, UserRepository userRepository) {
+    public StripeController(EventService eventService, TransferService transferService, UserService userService, StripeService stripeService, @Value("${stripe.webhook.secret}") String webhookSecret, @Value("${stripe.webhook.subscriptionSecret}") String webhookSubscriptionSecret, UserTitlesRepository userTitlesRepository, MembershipRepository membershipRepository, UserRepository userRepository, PromoService promoService) {
         this.eventService = eventService;
         this.stripeService = stripeService;
         this.webhookSecret = webhookSecret;
@@ -63,6 +62,7 @@ public class StripeController {
         this.userRepository = userRepository;
         this.webhookSubscriptionSecret = webhookSubscriptionSecret;
         this.transferService = transferService;
+        this.promoService = promoService;
     }
 
     @PostMapping("/webhook")
@@ -103,7 +103,7 @@ public class StripeController {
                         System.out.println("User created with ID: " + user.getId() + " for customer: " + customerId);
 
                         // Create subscriptions (assuming this method exists from previous request)
-                        createSubscriptions(customerId, paymentMethodId, user.isLockedInRate());
+                        createSubscriptions(customerId, paymentMethodId, user.isLockedInRate(), session.getMetadata().get("promoToken") );
 
                     } else {
                         // No payment method provided, delete the Stripe customer
@@ -238,6 +238,9 @@ public class StripeController {
         System.out.println("userLog: " + user);
         System.out.println("getReferredMembersDto: " + user.getReferredMembersDto());
         userService.save(user);
+
+        System.out.println(metadata.get("promoToken") +": INside the create sub");
+        promoService.addUserToPromo(metadata.get("promoToken"), user.getId());
         return user;
     }
 
@@ -279,6 +282,11 @@ public class StripeController {
             if (userRequest.getReferralId() != null) {
                 String referredId = userRequest.getReferralId().toString();
                 metadata.put("referredUserId", referredId);
+            }
+            System.out.println(userRequest.getPromoToken()+ "ourside");
+            if (userRequest.getPromoToken() != null) {
+                System.out.println(userRequest.getPromoToken() +"inside");
+                metadata.put("promoToken", userRequest.getPromoToken());
             }
 
             // Step 5: Create Checkout session in setup mode with metadata
@@ -419,7 +427,7 @@ public class StripeController {
     }
 
 
-    private void createSubscriptions(String customerId, String paymentMethodId, String membershipPrice) throws StripeException {
+    private void createSubscriptions(String customerId, String paymentMethodId, String membershipPrice, String PromoToken) throws StripeException {
         // Validate customer and payment method
         Customer customer = Customer.retrieve(customerId);
         if (customer.getDeleted() != null && customer.getDeleted()) {
@@ -461,23 +469,25 @@ public class StripeController {
         String applicationFeePriceId = "price_1RJOFhGHcVHSTvgI08VPh4XY"; // One-time application fee Price ID
 
         // Step 1: Create a one-time InvoiceItem for the application fee
-        InvoiceItemCreateParams invoiceItemParams = InvoiceItemCreateParams.builder()
-                .setCustomer(customerId)
-                .setPrice(applicationFeePriceId) // One-time $50 application fee
-                .setQuantity(1L)
-                .build();
 
-        InvoiceItem invoiceItem = InvoiceItem.create(invoiceItemParams);
+        if(!(PromoToken.toUpperCase(Locale.ROOT).equals("FOSTERFLATS"))) {
+            InvoiceItemCreateParams invoiceItemParams = InvoiceItemCreateParams.builder()
+                    .setCustomer(customerId)
+                    .setPrice(applicationFeePriceId) // One-time $50 application fee
+                    .setQuantity(1L)
+                    .build();
 
-        // Step 2: Create and finalize an invoice for the application fee
-        com.stripe.model.Invoice invoice = com.stripe.model.Invoice.create(
-                com.stripe.param.InvoiceCreateParams.builder()
-                        .setCustomer(customerId)
-                        .setCollectionMethod(com.stripe.param.InvoiceCreateParams.CollectionMethod.CHARGE_AUTOMATICALLY)
-                        .build()
-        );
-        invoice.finalizeInvoice();
+            InvoiceItem invoiceItem = InvoiceItem.create(invoiceItemParams);
 
+            // Step 2: Create and finalize an invoice for the application fee
+            com.stripe.model.Invoice invoice = com.stripe.model.Invoice.create(
+                    com.stripe.param.InvoiceCreateParams.builder()
+                            .setCustomer(customerId)
+                            .setCollectionMethod(com.stripe.param.InvoiceCreateParams.CollectionMethod.CHARGE_AUTOMATICALLY)
+                            .build()
+            );
+            invoice.finalizeInvoice();
+        }
         // Step 3: Create the subscription (without the application fee)
         SubscriptionCreateParams.Builder subscriptionBuilder = SubscriptionCreateParams.builder()
                 .setCustomer(customerId)

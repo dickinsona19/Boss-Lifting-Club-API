@@ -58,4 +58,11 @@ public class PromoController {
             return ResponseEntity.badRequest().body(e.getMessage());
         }
     }
+
+
+    @GetMapping("/by-token/{codeToken}")
+    public ResponseEntity<Promo> getPromoByCodeToken(@PathVariable String codeToken) {
+        Optional<Promo> promo = promoService.findByCodeToken(codeToken);
+        return promo.map(ResponseEntity::ok).orElseGet(() -> ResponseEntity.notFound().build());
+    }
 }
