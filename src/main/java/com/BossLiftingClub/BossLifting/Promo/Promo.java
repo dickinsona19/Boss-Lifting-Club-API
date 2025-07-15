@@ -2,6 +2,8 @@ package com.BossLiftingClub.BossLifting.Promo;
 
 import com.BossLiftingClub.BossLifting.User.User;
 import jakarta.persistence.*;
+
+import java.util.ArrayList;
 import java.util.List;
 
 @Entity
@@ -24,7 +26,7 @@ public class Promo {
             joinColumns = @JoinColumn(name = "promo_id"),
             inverseJoinColumns = @JoinColumn(name = "user_id")
     )
-    private List<User> users;
+    private List<User> users = new ArrayList<>();
 
     // Getters and Setters
     public Long getId() {
