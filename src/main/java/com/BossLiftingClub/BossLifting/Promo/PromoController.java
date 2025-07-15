@@ -14,14 +14,20 @@ public class PromoController {
     private PromoService promoService;
 
     @GetMapping
-    public List<Promo> getAllPromos() {
+    public List<PromoDTO> getAllPromos() {
         return promoService.findAll();
     }
 
     @GetMapping("/{id}")
-    public ResponseEntity<Promo> getPromoById(@PathVariable Long id) {
-        Optional<Promo> promo = promoService.findById(id);
-        return promo.map(ResponseEntity::ok).orElseGet(() -> ResponseEntity.notFound().build());
+    public ResponseEntity<PromoDTO> getPromoById(@PathVariable Long id) {
+        Optional<PromoDTO> promoDto = promoService.findById(id);
+        return promoDto.map(ResponseEntity::ok).orElseGet(() -> ResponseEntity.notFound().build());
+    }
+
+    @GetMapping("/by-token/{codeToken}")
+    public ResponseEntity<PromoDTO> getPromoByCodeToken(@PathVariable String codeToken) {
+        Optional<PromoDTO> promoDto = promoService.findByCodeToken(codeToken);
+        return promoDto.map(ResponseEntity::ok).orElseGet(() -> ResponseEntity.notFound().build());
     }
 
     @PostMapping
@@ -31,7 +37,14 @@ public class PromoController {
 
     @PutMapping("/{id}")
     public ResponseEntity<Promo> updatePromo(@PathVariable Long id, @RequestBody Promo promoDetails) {
-        Optional<Promo> promoOptional = promoService.findById(id);
+        Optional<Promo> promoOptional = promoService.findById(id).map(dto -> {
+            Promo promo = new Promo();
+            promo.setId(dto.getId());
+            promo.setName(dto.getName());
+            promo.setCodeToken(dto.getCodeToken());
+            // Note: Users are not updated here to avoid lazy loading issues
+            return promo;
+        });
         if (promoOptional.isEmpty()) {
             return ResponseEntity.notFound().build();
         }
@@ -57,12 +70,5 @@ public class PromoController {
         } catch (RuntimeException e) {
             return ResponseEntity.badRequest().body(e.getMessage());
         }
-    }
-
-
-    @GetMapping("/by-token/{codeToken}")
-    public ResponseEntity<Promo> getPromoByCodeToken(@PathVariable String codeToken) {
-        Optional<Promo> promo = promoService.findByCodeToken(codeToken);
-        return promo.map(ResponseEntity::ok).orElseGet(() -> ResponseEntity.notFound().build());
     }
 }

@@ -5,11 +5,11 @@ import java.util.Optional;
 
 public interface PromoService {
 
-    List<Promo> findAll();
+    List<PromoDTO> findAll();
 
-    Optional<Promo> findById(Long id);
+    Optional<PromoDTO> findById(Long id);
 
-    Optional<Promo> findByCodeToken(String codeToken);
+    Optional<PromoDTO> findByCodeToken(String codeToken);
 
     Promo save(Promo promo);
 
