@@ -4,9 +4,10 @@ import com.BossLiftingClub.BossLifting.User.User;
 import com.BossLiftingClub.BossLifting.User.UserRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
+
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
-
 import java.util.stream.Collectors;
 
 @Service
@@ -20,7 +21,7 @@ public class PromoServiceImpl implements PromoService {
 
     @Override
     public List<PromoDTO> findAll() {
-        return promoRepository.findAll().stream()
+        return promoRepository.findAllWithUsers().stream()
                 .map(promo -> new PromoDTO(
                         promo.getId(),
                         promo.getName(),
@@ -34,7 +35,7 @@ public class PromoServiceImpl implements PromoService {
 
     @Override
     public Optional<PromoDTO> findById(Long id) {
-        return promoRepository.findById(id).map(promo -> new PromoDTO(
+        return promoRepository.findByIdWithUsers(id).map(promo -> new PromoDTO(
                 promo.getId(),
                 promo.getName(),
                 promo.getCodeToken(),
@@ -46,7 +47,7 @@ public class PromoServiceImpl implements PromoService {
 
     @Override
     public Optional<PromoDTO> findByCodeToken(String codeToken) {
-        return promoRepository.findByCodeToken(codeToken).map(promo -> new PromoDTO(
+        return promoRepository.findByCodeTokenWithUsers(codeToken).map(promo -> new PromoDTO(
                 promo.getId(),
                 promo.getName(),
                 promo.getCodeToken(),
@@ -68,7 +69,7 @@ public class PromoServiceImpl implements PromoService {
 
     @Override
     public void addUserToPromo(String codeToken, Long userId) {
-        Optional<Promo> promoOptional = promoRepository.findByCodeToken(codeToken);
+        Optional<Promo> promoOptional = promoRepository.findByCodeTokenWithUsers(codeToken);
         if (promoOptional.isEmpty()) {
             throw new RuntimeException("Promo not found with codeToken: " + codeToken);
         }
@@ -80,6 +81,9 @@ public class PromoServiceImpl implements PromoService {
         }
         User user = userOptional.get();
 
+        if (promo.getUsers() == null) {
+            promo.setUsers(new ArrayList<>());
+        }
         promo.getUsers().add(user);
         save(promo);
     }
