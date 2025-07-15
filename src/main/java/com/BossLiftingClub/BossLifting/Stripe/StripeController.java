@@ -814,5 +814,34 @@ public class StripeController {
             return ResponseEntity.status(500).body("Failed to send email: " + e.getMessage());
         }
     }
+
+
+    @PostMapping("/cancel-subscriptions/{customerId}")
+    public String cancelSubscriptions(@PathVariable String customerId) throws StripeException {
+
+        // List all subscriptions for the customer
+        Map<String, Object> listParams = new HashMap<>();
+        listParams.put("customer", customerId);
+        listParams.put("status", "active"); // Only cancel active subscriptions
+
+        SubscriptionCollection subscriptions = Subscription.list(listParams);
+
+        if (subscriptions.getData().isEmpty()) {
+            return "No active subscriptions found for customer: " + customerId;
+        }
+
+        StringBuilder result = new StringBuilder("Canceled subscriptions at period end for customer " + customerId + ":\n");
+
+        for (Subscription sub : subscriptions.getData()) {
+            // Update each subscription to cancel at period end
+            Map<String, Object> updateParams = new HashMap<>();
+            updateParams.put("cancel_at_period_end", true);
+
+            Subscription updatedSub = sub.update(updateParams);
+            result.append("Subscription ID: ").append(updatedSub.getId()).append(" will cancel at: ").append(updatedSub.getCurrentPeriodEnd()).append("\n");
+        }
+
+        return result.toString();
+    }
 }
 
