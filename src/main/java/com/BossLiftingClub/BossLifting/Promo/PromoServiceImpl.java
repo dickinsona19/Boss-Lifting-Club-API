@@ -7,6 +7,8 @@ import org.springframework.stereotype.Service;
 import java.util.List;
 import java.util.Optional;
 
+import java.util.stream.Collectors;
+
 @Service
 public class PromoServiceImpl implements PromoService {
 
@@ -17,18 +19,41 @@ public class PromoServiceImpl implements PromoService {
     private UserRepository userRepository;
 
     @Override
-    public List<Promo> findAll() {
-        return promoRepository.findAll();
+    public List<PromoDTO> findAll() {
+        return promoRepository.findAll().stream()
+                .map(promo -> new PromoDTO(
+                        promo.getId(),
+                        promo.getName(),
+                        promo.getCodeToken(),
+                        promo.getUsers() != null ?
+                                promo.getUsers().stream().map(User::getId).collect(Collectors.toList()) :
+                                List.of()
+                ))
+                .collect(Collectors.toList());
     }
 
     @Override
-    public Optional<Promo> findById(Long id) {
-        return promoRepository.findById(id);
+    public Optional<PromoDTO> findById(Long id) {
+        return promoRepository.findById(id).map(promo -> new PromoDTO(
+                promo.getId(),
+                promo.getName(),
+                promo.getCodeToken(),
+                promo.getUsers() != null ?
+                        promo.getUsers().stream().map(User::getId).collect(Collectors.toList()) :
+                        List.of()
+        ));
     }
 
     @Override
-    public Optional<Promo> findByCodeToken(String codeToken) {
-        return promoRepository.findByCodeToken(codeToken);
+    public Optional<PromoDTO> findByCodeToken(String codeToken) {
+        return promoRepository.findByCodeToken(codeToken).map(promo -> new PromoDTO(
+                promo.getId(),
+                promo.getName(),
+                promo.getCodeToken(),
+                promo.getUsers() != null ?
+                        promo.getUsers().stream().map(User::getId).collect(Collectors.toList()) :
+                        List.of()
+        ));
     }
 
     @Override
@@ -43,7 +68,7 @@ public class PromoServiceImpl implements PromoService {
 
     @Override
     public void addUserToPromo(String codeToken, Long userId) {
-        Optional<Promo> promoOptional = findByCodeToken(codeToken);
+        Optional<Promo> promoOptional = promoRepository.findByCodeToken(codeToken);
         if (promoOptional.isEmpty()) {
             throw new RuntimeException("Promo not found with codeToken: " + codeToken);
         }
@@ -55,10 +80,7 @@ public class PromoServiceImpl implements PromoService {
         }
         User user = userOptional.get();
 
-        // Add user to promo's users list (assuming it's initialized)
         promo.getUsers().add(user);
-
-        // Save the updated promo
         save(promo);
     }
 }
