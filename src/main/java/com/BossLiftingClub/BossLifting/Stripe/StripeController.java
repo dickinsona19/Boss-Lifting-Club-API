@@ -1,5 +1,6 @@
 package com.BossLiftingClub.BossLifting.Stripe;
 
+import com.BossLiftingClub.BossLifting.Promo.PromoDTO;
 import com.BossLiftingClub.BossLifting.Promo.PromoService;
 import com.BossLiftingClub.BossLifting.Stripe.ProcessedEvent.EventService;
 import com.BossLiftingClub.BossLifting.Stripe.RequestsAndResponses.*;
@@ -427,7 +428,7 @@ public class StripeController {
     }
 
 
-    private void createSubscriptions(String customerId, String paymentMethodId, String membershipPrice, String PromoToken) throws StripeException {
+    private void createSubscriptions(String customerId, String paymentMethodId, String membershipPrice, String PromoToken) throws Exception {
         // Validate customer and payment method
         Customer customer = Customer.retrieve(customerId);
         if (customer.getDeleted() != null && customer.getDeleted()) {
@@ -470,24 +471,8 @@ public class StripeController {
 
         // Step 1: Create a one-time InvoiceItem for the application fee
 
-        if(!(PromoToken.toUpperCase(Locale.ROOT).equals("FOSTERFLATS"))) {
-            InvoiceItemCreateParams invoiceItemParams = InvoiceItemCreateParams.builder()
-                    .setCustomer(customerId)
-                    .setPrice(applicationFeePriceId) // One-time $50 application fee
-                    .setQuantity(1L)
-                    .build();
 
-            InvoiceItem invoiceItem = InvoiceItem.create(invoiceItemParams);
-
-            // Step 2: Create and finalize an invoice for the application fee
-            com.stripe.model.Invoice invoice = com.stripe.model.Invoice.create(
-                    com.stripe.param.InvoiceCreateParams.builder()
-                            .setCustomer(customerId)
-                            .setCollectionMethod(com.stripe.param.InvoiceCreateParams.CollectionMethod.CHARGE_AUTOMATICALLY)
-                            .build()
-            );
-            invoice.finalizeInvoice();
-        }
+        processApplicationFee(customerId, applicationFeePriceId, PromoToken);
         // Step 3: Create the subscription (without the application fee)
         SubscriptionCreateParams.Builder subscriptionBuilder = SubscriptionCreateParams.builder()
                 .setCustomer(customerId)
@@ -539,6 +524,35 @@ public class StripeController {
         }
     }
 
+    public void processApplicationFee(String customerId, String applicationFeePriceId, String PromoToken) throws Exception {
+        // Fetch all promos
+        List<PromoDTO> promos = promoService.findAll();
+
+        // Check if PromoToken matches any promo's codeToken (case-insensitive)
+        boolean isValidPromo = promos.stream()
+                .anyMatch(promo -> promo.getCodeToken() != null &&
+                        promo.getCodeToken().toUpperCase(Locale.ROOT).equals(PromoToken.toUpperCase(Locale.ROOT)));
+
+        // If no valid promo is found, create the invoice item and invoice
+        if (!isValidPromo) {
+            InvoiceItemCreateParams invoiceItemParams = InvoiceItemCreateParams.builder()
+                    .setCustomer(customerId)
+                    .setPrice(applicationFeePriceId) // One-time $50 application fee
+                    .setQuantity(1L)
+                    .build();
+
+            InvoiceItem invoiceItem = InvoiceItem.create(invoiceItemParams);
+
+            // Create and finalize an invoice for the application fee
+            Invoice invoice = Invoice.create(
+                    InvoiceCreateParams.builder()
+                            .setCustomer(customerId)
+                            .setCollectionMethod(InvoiceCreateParams.CollectionMethod.CHARGE_AUTOMATICALLY)
+                            .build()
+            );
+            invoice.finalizeInvoice();
+        }
+    }
 
 
     @PostMapping("/{userId}/sendPasswordEmail")
