@@ -1,6 +1,7 @@
 package com.BossLiftingClub.BossLifting.Promo;
 
 import com.BossLiftingClub.BossLifting.User.User;
+import com.BossLiftingClub.BossLifting.User.UserDTO;
 import com.BossLiftingClub.BossLifting.User.UserRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
@@ -27,10 +28,10 @@ public class PromoServiceImpl implements PromoService {
                         promo.getName(),
                         promo.getCodeToken(),
                         promo.getUsers() != null ?
-                                promo.getUsers().stream().map(User::getId).collect(Collectors.toList()) :
+                                promo.getUsers().stream().map(UserDTO::new).toList() :
                                 List.of()
                 ))
-                .collect(Collectors.toList());
+                .toList();
     }
 
     @Override
@@ -40,7 +41,7 @@ public class PromoServiceImpl implements PromoService {
                 promo.getName(),
                 promo.getCodeToken(),
                 promo.getUsers() != null ?
-                        promo.getUsers().stream().map(User::getId).collect(Collectors.toList()) :
+                        promo.getUsers().stream().map(UserDTO::new).toList() :
                         List.of()
         ));
     }
@@ -52,7 +53,7 @@ public class PromoServiceImpl implements PromoService {
                 promo.getName(),
                 promo.getCodeToken(),
                 promo.getUsers() != null ?
-                        promo.getUsers().stream().map(User::getId).collect(Collectors.toList()) :
+                        promo.getUsers().stream().map(UserDTO::new).toList() :
                         List.of()
         ));
     }
