@@ -843,5 +843,83 @@ public class StripeController {
 
         return result.toString();
     }
+
+    private static final String NEW_CONTACT_EMAIL = "contact@cltliftingclub.com";
+    @PostMapping("/send-emails")
+    public ResponseEntity<Map<String, List<String>>> sendContactUpdateEmails() {
+        List<String> successes = new ArrayList<>();
+        List<String> failures = new ArrayList<>();
+
+        List<User> users = userRepository.findAll();
+
+        for (User user : users) {
+            String stripeMemberId = user.getUserStripeMemberId();
+            if (stripeMemberId == null || stripeMemberId.isEmpty()) {
+                failures.add("User ID " + user.getId() + ": No StripeMemberID found");
+                continue;
+            }
+
+            try {
+                // Fetch email from Stripe
+                Customer customer = Customer.retrieve(stripeMemberId);
+                String email = customer.getEmail();
+                if (email == null || email.isEmpty()) {
+                    failures.add("User ID " + user.getId() + ": No email found in Stripe for " + stripeMemberId);
+                    continue;
+                }
+
+                // Send email
+                MimeMessage mimeMessage = mailSender.createMimeMessage();
+                MimeMessageHelper helper = new MimeMessageHelper(mimeMessage, true, "UTF-8");
+                helper.setTo(email);
+                helper.setFrom(NEW_CONTACT_EMAIL);
+                helper.setSubject("Update: New Contact Email for CLT Lifting Club");
+                String htmlContent = """
+                    <!DOCTYPE html>
+                    <html>
+                    <head>
+                        <style>
+                            body { font-family: Arial, sans-serif; color: #333; }
+                            .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+                            .header { background-color: #f8f8f8; padding: 10px; text-align: center; }
+                            .content { padding: 20px; }
+                            .footer { font-size: 12px; color: #777; text-align: center; }
+                        </style>
+                    </head>
+                    <body>
+                        <div class="container">
+                            <div class="header">
+                                <h2>CLT Lifting Club</h2>
+                            </div>
+                            <div class="content">
+                                <p>Dear Member,</p>
+                                <p>We’ve updated our contact information to better serve you. Please use our new email address for all future inquiries:</p>
+                                <p><strong>%s</strong></p>
+                                <p>This ensures we can respond to your questions or concerns promptly. Thank you for being a valued member of CLT Lifting Club!</p>
+                                <p>Best regards,<br>The CLT Lifting Club Team</p>
+                            </div>
+                            <div class="footer">
+                                <p>CLT Lifting Club | %s</p>
+                            </div>
+                        </div>
+                    </body>
+                    </html>
+                    """.formatted(NEW_CONTACT_EMAIL, NEW_CONTACT_EMAIL);
+                helper.setText(htmlContent, true);
+                mailSender.send(mimeMessage);
+
+                successes.add("User ID " + user.getId() + ": Email sent to " + email);
+            } catch (StripeException e) {
+                failures.add("User ID " + user.getId() + ": Stripe error for " + stripeMemberId + " - " + e.getMessage());
+            } catch (MessagingException e) {
+                failures.add("User ID " + user.getId() + ": Email sending failed for " + stripeMemberId + " - " + e.getMessage());
+            }
+        }
+
+        Map<String, List<String>> response = new HashMap<>();
+        response.put("successes", successes);
+        response.put("failures", failures);
+        return ResponseEntity.ok(response);
+    }
 }
 
