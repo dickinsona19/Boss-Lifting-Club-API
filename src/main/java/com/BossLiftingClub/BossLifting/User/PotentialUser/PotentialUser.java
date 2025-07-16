@@ -12,6 +12,7 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.multipart.MultipartFile;
 
+import javax.annotation.Nullable;
 import java.io.IOException;
 import java.util.List;
 import java.util.Optional;
@@ -164,7 +165,7 @@ class PotentialUserController {
     }
 
     @PostMapping
-    public PotentialUser addUser(@RequestBody PotentialUser user, @RequestParam("from") String promoCode) {
+    public PotentialUser addUser(@RequestBody PotentialUser user, @RequestParam(name = "from", required = false) @Nullable String promoCode) {
         return service.addUser(user, promoCode);
     }
 
