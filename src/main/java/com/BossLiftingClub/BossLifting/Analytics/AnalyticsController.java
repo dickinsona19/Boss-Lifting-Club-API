@@ -3,10 +3,8 @@ package com.BossLiftingClub.BossLifting.Analytics;
 import com.BossLiftingClub.BossLifting.User.User;
 import com.BossLiftingClub.BossLifting.User.UserRepository;
 import com.stripe.Stripe;
-import com.stripe.model.Subscription;
-import com.stripe.model.SubscriptionCollection;
-import com.stripe.model.SubscriptionItem;
-import com.stripe.model.SubscriptionItemCollection;
+import com.stripe.model.*;
+import com.stripe.param.InvoiceListParams;
 import com.stripe.param.SubscriptionListParams;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
@@ -24,6 +22,8 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+
+import static com.stripe.param.InvoiceListParams.Status.PAID;
 
 @RestController
 @RequestMapping("/api/analytics")
@@ -49,7 +49,15 @@ public class AnalyticsController {
             String ignoredPriceId = "price_1RF30SGHcVHSTvgIpegCzQ0m";
 
             // Fetch all users from existing UserRepository
-            List<User> users = userRepository.findAll();
+            List<User> users;
+            try {
+                users = userRepository.findAll();
+                logger.info("Fetched {} users from UserRepository", users.size());
+            } catch (Exception e) {
+                logger.error("Error fetching users: {}", e.getMessage());
+                throw new RuntimeException("Failed to fetch users: " + e.getMessage());
+            }
+
             List<Subscription> relevantSubscriptions = new ArrayList<>();
 
             // Define time periods for monthly comparison
@@ -79,7 +87,11 @@ public class AnalyticsController {
                             boolean isRelevant = false;
                             SubscriptionItemCollection items = sub.getItems();
                             for (SubscriptionItem item : items.getData()) {
-                                String priceId = item.getPrice().getId();
+                                String priceId = item.getPrice() != null ? item.getPrice().getId() : null;
+                                if (priceId == null) {
+                                    logger.warn("Skipping subscription item with null price for subscription {} and user {}", sub.getId(), user.getId());
+                                    continue;
+                                }
                                 if (!priceId.equals(ignoredPriceId)) {
                                     isRelevant = true;
                                     break;
@@ -90,12 +102,12 @@ public class AnalyticsController {
                             }
                         } catch (Exception e) {
                             logger.error("Error processing subscription {} for user {}: {}", sub.getId(), user.getId(), e.getMessage());
-                            continue; // Skip problematic subscription
+                            continue;
                         }
                     }
                 } catch (Exception e) {
                     logger.error("Error fetching subscriptions for user {}: {}", user.getId(), e.getMessage());
-                    continue; // Skip problematic user
+                    continue;
                 }
             }
 
@@ -106,7 +118,8 @@ public class AnalyticsController {
                 for (Subscription sub : relevantSubscriptions) {
                     try {
                         for (SubscriptionItem item : sub.getItems().getData()) {
-                            String priceId = item.getPrice().getId();
+                            String priceId = item.getPrice() != null ? item.getPrice().getId() : null;
+                            if (priceId == null) continue;
                             if (userType.equals("misc")) {
                                 if (!priceIds.containsValue(priceId) && !priceId.equals(ignoredPriceId)) {
                                     filteredSubscriptions.add(sub);
@@ -119,7 +132,7 @@ public class AnalyticsController {
                         }
                     } catch (Exception e) {
                         logger.error("Error filtering subscription {}: {}", sub.getId(), e.getMessage());
-                        continue; // Skip problematic subscription
+                        continue;
                     }
                 }
             } else {
@@ -127,7 +140,7 @@ public class AnalyticsController {
             }
 
             // Calculate analytics metrics
-            double totalRevenueThisMonth = 0;
+            double projectedRevenueThisMonth = 0;
             double totalRevenueLastMonth = 0;
             int userCount = 0;
             Map<String, UserTypeData> userTypeBreakdown = new HashMap<>();
@@ -141,14 +154,69 @@ public class AnalyticsController {
                 weeklyRevenueLastMonth.put(week, 0.0);
             }
 
+            // Calculate last month's revenue using invoices
+            for (User user : users) {
+                if (user.getUserStripeMemberId() == null) continue;
+
+                try {
+                    InvoiceListParams invoiceParams = InvoiceListParams.builder()
+                            .setCustomer(user.getUserStripeMemberId())
+                            .setStatus(PAID)
+                            .setCreated(InvoiceListParams.Created.builder()
+                                    .setGte(lastMonthStartEpoch)
+                                    .setLte(lastMonthEndEpoch)
+                                    .build())
+                            .build();
+
+                    for (Invoice invoice : Invoice.list(invoiceParams).autoPagingIterable()) {
+                        try {
+                            for (com.stripe.model.InvoiceLineItem line : invoice.getLines().getData()) {
+                                String priceId = line.getPrice() != null ? line.getPrice().getId() : null;
+                                if (priceId == null || priceId.equals(ignoredPriceId)) continue;
+
+                                String subscriptionType = priceIds.entrySet().stream()
+                                        .filter(entry -> entry.getValue().equals(priceId))
+                                        .map(Map.Entry::getKey)
+                                        .findFirst()
+                                        .orElse("misc");
+
+                                if (!userType.equals("all") && !userType.equals(subscriptionType) && !(userType.equals("misc") && !priceIds.containsValue(priceId))) {
+                                    continue;
+                                }
+
+                                double amountInDollars = line.getAmount() / 100.0;
+                                totalRevenueLastMonth += amountInDollars;
+
+                                long created = invoice.getCreated();
+                                long daysSinceLastMonthStart = (created - lastMonthStartEpoch) / (24 * 3600);
+                                int weekIndex = Math.min(Math.max((int) (daysSinceLastMonthStart / 7), 0), 3);
+                                weeklyRevenueLastMonth.put(weeks[weekIndex], weeklyRevenueLastMonth.get(weeks[weekIndex]) + amountInDollars);
+
+                                UserTypeData typeData = userTypeBreakdown.getOrDefault(subscriptionType, new UserTypeData());
+                                typeData.revenue += amountInDollars;
+                                userTypeBreakdown.put(subscriptionType, typeData);
+                            }
+                        } catch (Exception e) {
+                            logger.error("Error processing invoice {} for user {}: {}", invoice.getId(), user.getId(), e.getMessage());
+                            continue;
+                        }
+                    }
+                } catch (Exception e) {
+                    logger.error("Error fetching invoices for user {}: {}", user.getId(), e.getMessage());
+                    continue;
+                }
+            }
+
+            // Calculate projected revenue and user count
             for (Subscription sub : filteredSubscriptions) {
                 try {
-                    userCount++;
+                    if (sub.getStatus().equals("active")) {
+                        userCount++;
+                    }
                     for (SubscriptionItem item : sub.getItems().getData()) {
-                        String priceId = item.getPrice().getId();
-                        if (priceId.equals(ignoredPriceId)) continue;
+                        String priceId = item.getPrice() != null ? item.getPrice().getId() : null;
+                        if (priceId == null || priceId.equals(ignoredPriceId)) continue;
 
-                        // Categorize as misc if not a known price ID
                         String subscriptionType = priceIds.entrySet().stream()
                                 .filter(entry -> entry.getValue().equals(priceId))
                                 .map(Map.Entry::getKey)
@@ -157,51 +225,45 @@ public class AnalyticsController {
 
                         long unitAmount = item.getPrice().getUnitAmount();
                         double amountInDollars = unitAmount / 100.0;
+                        String interval = item.getPrice().getRecurring() != null ? item.getPrice().getRecurring().getInterval() : "month";
 
-                        // Update user type breakdown
-                        UserTypeData typeData = userTypeBreakdown.getOrDefault(subscriptionType, new UserTypeData());
-                        typeData.count++;
-                        typeData.revenue += amountInDollars;
-                        userTypeBreakdown.put(subscriptionType, typeData);
+                        // Prorate for current month (only for active subscriptions)
+                        if (sub.getStatus().equals("active")) {
+                            double proratedAmount = interval.equals("year") ? amountInDollars / 12 : amountInDollars;
+                            projectedRevenueThisMonth += proratedAmount;
 
-                        // Determine the subscription's billing period
-                        long created = sub.getCreated();
-                        String interval = item.getPrice().getRecurring().getInterval();
-                        long periodStart = sub.getCurrentPeriodStart();
-                        long periodEnd = sub.getCurrentPeriodEnd();
+                            // Update user type breakdown
+                            UserTypeData typeData = userTypeBreakdown.getOrDefault(subscriptionType, new UserTypeData());
+                            typeData.count = sub.getStatus().equals("active") ? typeData.count + 1 : typeData.count;
+                            typeData.revenue += proratedAmount;
+                            userTypeBreakdown.put(subscriptionType, typeData);
 
-                        // Assign revenue to this month or last month
-                        if (periodStart >= thisMonthStartEpoch) {
-                            totalRevenueThisMonth += amountInDollars;
-                            // Fix weekIndex to prevent negative values
-                            long daysSinceMonthStart = (created - thisMonthStartEpoch) / (24 * 3600);
-                            int weekIndex = Math.min(Math.max((int) (daysSinceMonthStart / 7), 0), 3);
-                            weeklyRevenueThisMonth.put(weeks[weekIndex], weeklyRevenueThisMonth.get(weeks[weekIndex]) + amountInDollars);
-                        } else if (periodStart >= lastMonthStartEpoch && periodEnd <= lastMonthEndEpoch) {
-                            totalRevenueLastMonth += amountInDollars;
-                            long daysSinceLastMonthStart = (created - lastMonthStartEpoch) / (24 * 3600);
-                            int weekIndex = Math.min(Math.max((int) (daysSinceLastMonthStart / 7), 0), 3);
-                            weeklyRevenueLastMonth.put(weeks[weekIndex], weeklyRevenueLastMonth.get(weeks[weekIndex]) + amountInDollars);
+                            // Assign to weekly revenue (using creation date)
+                            if (sub.getCurrentPeriodStart() >= thisMonthStartEpoch) {
+                                long created = sub.getCreated();
+                                long daysSinceMonthStart = (created - thisMonthStartEpoch) / (24 * 3600);
+                                int weekIndex = Math.min(Math.max((int) (daysSinceMonthStart / 7), 0), 3);
+                                weeklyRevenueThisMonth.put(weeks[weekIndex], weeklyRevenueThisMonth.get(weeks[weekIndex]) + proratedAmount);
+                            }
                         }
                     }
                 } catch (Exception e) {
                     logger.error("Error processing subscription {}: {}", sub.getId(), e.getMessage());
-                    continue; // Skip problematic subscription
+                    continue;
                 }
             }
 
             // Calculate metrics
-            double averageRevenue = userCount > 0 ? totalRevenueThisMonth / userCount : 0;
             double percentageChange = totalRevenueLastMonth > 0 ?
-                    ((totalRevenueThisMonth - totalRevenueLastMonth) / totalRevenueLastMonth) * 100 : 0;
+                    ((projectedRevenueThisMonth - totalRevenueLastMonth) / totalRevenueLastMonth) * 100 : 0;
 
             // Prepare response
             AnalyticsResponse response = new AnalyticsResponse();
-            response.setTotalRevenue(totalRevenueThisMonth);
+            response.setTotalRevenue(projectedRevenueThisMonth);
             response.setUserCount(userCount);
-            response.setAverageRevenue(averageRevenue);
+            response.setProjectedRevenue(projectedRevenueThisMonth);
             response.setMonthlyComparison(new MonthlyComparison(
-                    totalRevenueThisMonth,
+                    projectedRevenueThisMonth,
                     totalRevenueLastMonth,
                     percentageChange
             ));
@@ -212,10 +274,11 @@ public class AnalyticsController {
             ));
             response.setUserTypeBreakdown(userTypeBreakdown);
 
+            logger.info("Analytics processed successfully for userType={}", userType);
             return response;
 
         } catch (Exception e) {
-            logger.error("Unexpected error in getAnalytics: {}", e.getMessage());
+            logger.error("Unexpected error in getAnalytics: {}", e.getMessage(), e);
             throw new RuntimeException("Error fetching analytics data: " + e.getMessage());
         }
     }
@@ -224,7 +287,7 @@ public class AnalyticsController {
     public static class AnalyticsResponse {
         private double totalRevenue;
         private int userCount;
-        private double averageRevenue;
+        private double projectedRevenue;
         private MonthlyComparison monthlyComparison;
         private ChartData chartData;
         private Map<String, UserTypeData> userTypeBreakdown;
@@ -234,8 +297,8 @@ public class AnalyticsController {
         public void setTotalRevenue(double totalRevenue) { this.totalRevenue = totalRevenue; }
         public int getUserCount() { return userCount; }
         public void setUserCount(int userCount) { this.userCount = userCount; }
-        public double getAverageRevenue() { return averageRevenue; }
-        public void setAverageRevenue(double averageRevenue) { this.averageRevenue = averageRevenue; }
+        public double getProjectedRevenue() { return projectedRevenue; }
+        public void setProjectedRevenue(double projectedRevenue) { this.projectedRevenue = projectedRevenue; }
         public MonthlyComparison getMonthlyComparison() { return monthlyComparison; }
         public void setMonthlyComparison(MonthlyComparison monthlyComparison) { this.monthlyComparison = monthlyComparison; }
         public ChartData getChartData() { return chartData; }
@@ -277,7 +340,6 @@ public class AnalyticsController {
         public Double[] getThisMonth() { return thisMonth; }
         public Double[] getLastMonth() { return lastMonth; }
     }
-
     public static class UserTypeData {
         private int count;
         private double revenue;
