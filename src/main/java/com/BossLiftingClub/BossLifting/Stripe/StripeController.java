@@ -241,7 +241,13 @@ public class StripeController {
         userService.save(user);
 
         System.out.println(metadata.get("promoToken") +": INside the create sub");
-        promoService.addUserToPromo(metadata.get("promoToken"), user.getId());
+        String promoToken = metadata.get("promoToken");
+        if (promoToken != null) {
+            promoService.addUserToPromo(promoToken, user.getId());
+        } else {
+            System.out.println("No promo token provided in metadata.");
+        }
+
         return user;
     }
 
