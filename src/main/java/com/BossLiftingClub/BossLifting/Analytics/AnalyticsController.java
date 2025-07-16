@@ -54,7 +54,7 @@ public class AnalyticsController {
                 users = userRepository.findAll();
                 logger.info("Fetched {} users from UserRepository", users.size());
             } catch (Exception e) {
-                logger.error("Error fetching users: {}", e.getMessage());
+                logger.error("Error fetching users: {}", e.getMessage(), e);
                 throw new RuntimeException("Failed to fetch users: " + e.getMessage());
             }
 
@@ -63,10 +63,13 @@ public class AnalyticsController {
             // Define time periods for monthly comparison
             LocalDate now = LocalDate.now();
             LocalDate startOfThisMonth = now.withDayOfMonth(1);
+            LocalDate endOfThisMonth = startOfThisMonth.plusMonths(1).minusDays(1);
             LocalDate startOfLastMonth = startOfThisMonth.minusMonths(1);
+            LocalDate endOfLastMonth = startOfLastMonth.plusMonths(1).minusDays(1);
             long thisMonthStartEpoch = startOfThisMonth.atStartOfDay(ZoneId.systemDefault()).toEpochSecond();
+            long thisMonthEndEpoch = endOfThisMonth.atTime(23, 59, 59).atZone(ZoneId.systemDefault()).toEpochSecond();
             long lastMonthStartEpoch = startOfLastMonth.atStartOfDay(ZoneId.systemDefault()).toEpochSecond();
-            long lastMonthEndEpoch = startOfThisMonth.atStartOfDay(ZoneId.systemDefault()).toEpochSecond() - 1;
+            long lastMonthEndEpoch = endOfLastMonth.atTime(23, 59, 59).atZone(ZoneId.systemDefault()).toEpochSecond();
 
             // Fetch all subscriptions for each user
             for (User user : users) {
@@ -207,7 +210,7 @@ public class AnalyticsController {
                 }
             }
 
-            // Calculate projected revenue and user count
+            // Calculate projected revenue and user count based on upcoming renewals
             for (Subscription sub : filteredSubscriptions) {
                 try {
                     if (sub.getStatus().equals("active")) {
@@ -225,26 +228,22 @@ public class AnalyticsController {
 
                         long unitAmount = item.getPrice().getUnitAmount();
                         double amountInDollars = unitAmount / 100.0;
-                        String interval = item.getPrice().getRecurring() != null ? item.getPrice().getRecurring().getInterval() : "month";
 
-                        // Prorate for current month (only for active subscriptions)
-                        if (sub.getStatus().equals("active")) {
-                            double proratedAmount = interval.equals("year") ? amountInDollars / 12 : amountInDollars;
-                            projectedRevenueThisMonth += proratedAmount;
+                        // Check if subscription renews this month
+                        if (sub.getStatus().equals("active") && sub.getCurrentPeriodEnd() >= thisMonthStartEpoch && sub.getCurrentPeriodEnd() <= thisMonthEndEpoch) {
+                            projectedRevenueThisMonth += amountInDollars;
 
                             // Update user type breakdown
                             UserTypeData typeData = userTypeBreakdown.getOrDefault(subscriptionType, new UserTypeData());
                             typeData.count = sub.getStatus().equals("active") ? typeData.count + 1 : typeData.count;
-                            typeData.revenue += proratedAmount;
+                            typeData.revenue += amountInDollars;
                             userTypeBreakdown.put(subscriptionType, typeData);
 
-                            // Assign to weekly revenue (using creation date)
-                            if (sub.getCurrentPeriodStart() >= thisMonthStartEpoch) {
-                                long created = sub.getCreated();
-                                long daysSinceMonthStart = (created - thisMonthStartEpoch) / (24 * 3600);
-                                int weekIndex = Math.min(Math.max((int) (daysSinceMonthStart / 7), 0), 3);
-                                weeklyRevenueThisMonth.put(weeks[weekIndex], weeklyRevenueThisMonth.get(weeks[weekIndex]) + proratedAmount);
-                            }
+                            // Assign to weekly revenue (using current_period_end)
+                            long periodEnd = sub.getCurrentPeriodEnd();
+                            long daysSinceMonthStart = (periodEnd - thisMonthStartEpoch) / (24 * 3600);
+                            int weekIndex = Math.min(Math.max((int) (daysSinceMonthStart / 7), 0), 3);
+                            weeklyRevenueThisMonth.put(weeks[weekIndex], weeklyRevenueThisMonth.get(weeks[weekIndex]) + amountInDollars);
                         }
                     }
                 } catch (Exception e) {
@@ -274,7 +273,8 @@ public class AnalyticsController {
             ));
             response.setUserTypeBreakdown(userTypeBreakdown);
 
-            logger.info("Analytics processed successfully for userType={}", userType);
+            logger.info("Analytics processed successfully for userType={}: projectedRevenue={}, lastMonthRevenue={}, userCount={}",
+                    userType, projectedRevenueThisMonth, totalRevenueLastMonth, userCount);
             return response;
 
         } catch (Exception e) {
@@ -340,6 +340,7 @@ public class AnalyticsController {
         public Double[] getThisMonth() { return thisMonth; }
         public Double[] getLastMonth() { return lastMonth; }
     }
+
     public static class UserTypeData {
         private int count;
         private double revenue;
