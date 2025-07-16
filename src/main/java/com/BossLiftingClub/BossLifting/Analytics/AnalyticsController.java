@@ -14,7 +14,8 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
-
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import javax.annotation.PostConstruct;
 import java.time.Instant;
 import java.time.LocalDate;
@@ -31,7 +32,7 @@ public class AnalyticsController {
 
     @Autowired
     private final UserRepository userRepository;
-
+    private static final Logger logger = LoggerFactory.getLogger(AnalyticsController.class);
     public AnalyticsController(UserRepository userRepository) {
         this.userRepository = userRepository;
     }
@@ -59,29 +60,42 @@ public class AnalyticsController {
             long lastMonthStartEpoch = startOfLastMonth.atStartOfDay(ZoneId.systemDefault()).toEpochSecond();
             long lastMonthEndEpoch = startOfThisMonth.atStartOfDay(ZoneId.systemDefault()).toEpochSecond() - 1;
 
-            // Fetch all subscriptions for each user (purely data retrieval, no creation)
+            // Fetch all subscriptions for each user
             for (User user : users) {
-                if (user.getUserStripeMemberId() == null) continue;
+                if (user.getUserStripeMemberId() == null) {
+                    logger.warn("Skipping user with ID {}: stripeCustomerId is null", user.getId());
+                    continue;
+                }
 
-                // Query all subscriptions for the user’s stripeCustomerId
-                SubscriptionListParams params = SubscriptionListParams.builder()
-                        .setCustomer(user.getUserStripeMemberId())
-                        .build();
+                try {
+                    // Query all subscriptions for the user’s stripeCustomerId
+                    SubscriptionListParams params = SubscriptionListParams.builder()
+                            .setCustomer(user.getUserStripeMemberId())
+                            .build();
 
-                SubscriptionCollection subscriptions = Subscription.list(params);
-                for (Subscription sub : subscriptions.autoPagingIterable()) {
-                    boolean isRelevant = false;
-                    SubscriptionItemCollection items = sub.getItems();
-                    for (SubscriptionItem item : items.getData()) {
-                        String priceId = item.getPrice().getId();
-                        if (!priceId.equals(ignoredPriceId)) {
-                            isRelevant = true;
-                            break;
+                    SubscriptionCollection subscriptions = Subscription.list(params);
+                    for (Subscription sub : subscriptions.autoPagingIterable()) {
+                        try {
+                            boolean isRelevant = false;
+                            SubscriptionItemCollection items = sub.getItems();
+                            for (SubscriptionItem item : items.getData()) {
+                                String priceId = item.getPrice().getId();
+                                if (!priceId.equals(ignoredPriceId)) {
+                                    isRelevant = true;
+                                    break;
+                                }
+                            }
+                            if (isRelevant) {
+                                relevantSubscriptions.add(sub);
+                            }
+                        } catch (Exception e) {
+                            logger.error("Error processing subscription {} for user {}: {}", sub.getId(), user.getId(), e.getMessage());
+                            continue; // Skip problematic subscription
                         }
                     }
-                    if (isRelevant) {
-                        relevantSubscriptions.add(sub);
-                    }
+                } catch (Exception e) {
+                    logger.error("Error fetching subscriptions for user {}: {}", user.getId(), e.getMessage());
+                    continue; // Skip problematic user
                 }
             }
 
@@ -90,17 +104,22 @@ public class AnalyticsController {
             if (!userType.equals("all")) {
                 String targetPriceId = priceIds.get(userType);
                 for (Subscription sub : relevantSubscriptions) {
-                    for (SubscriptionItem item : sub.getItems().getData()) {
-                        String priceId = item.getPrice().getId();
-                        if (userType.equals("misc")) {
-                            if (!priceIds.containsValue(priceId) && !priceId.equals(ignoredPriceId)) {
+                    try {
+                        for (SubscriptionItem item : sub.getItems().getData()) {
+                            String priceId = item.getPrice().getId();
+                            if (userType.equals("misc")) {
+                                if (!priceIds.containsValue(priceId) && !priceId.equals(ignoredPriceId)) {
+                                    filteredSubscriptions.add(sub);
+                                    break;
+                                }
+                            } else if (priceId.equals(targetPriceId)) {
                                 filteredSubscriptions.add(sub);
                                 break;
                             }
-                        } else if (priceId.equals(targetPriceId)) {
-                            filteredSubscriptions.add(sub);
-                            break;
                         }
+                    } catch (Exception e) {
+                        logger.error("Error filtering subscription {}: {}", sub.getId(), e.getMessage());
+                        continue; // Skip problematic subscription
                     }
                 }
             } else {
@@ -123,44 +142,51 @@ public class AnalyticsController {
             }
 
             for (Subscription sub : filteredSubscriptions) {
-                userCount++;
-                for (SubscriptionItem item : sub.getItems().getData()) {
-                    String priceId = item.getPrice().getId();
-                    if (priceId.equals(ignoredPriceId)) continue;
+                try {
+                    userCount++;
+                    for (SubscriptionItem item : sub.getItems().getData()) {
+                        String priceId = item.getPrice().getId();
+                        if (priceId.equals(ignoredPriceId)) continue;
 
-                    // Categorize as misc if not a known price ID
-                    String subscriptionType = priceIds.entrySet().stream()
-                            .filter(entry -> entry.getValue().equals(priceId))
-                            .map(Map.Entry::getKey)
-                            .findFirst()
-                            .orElse("misc");
+                        // Categorize as misc if not a known price ID
+                        String subscriptionType = priceIds.entrySet().stream()
+                                .filter(entry -> entry.getValue().equals(priceId))
+                                .map(Map.Entry::getKey)
+                                .findFirst()
+                                .orElse("misc");
 
-                    long unitAmount = item.getPrice().getUnitAmount();
-                    double amountInDollars = unitAmount / 100.0;
+                        long unitAmount = item.getPrice().getUnitAmount();
+                        double amountInDollars = unitAmount / 100.0;
 
-                    // Update user type breakdown
-                    UserTypeData typeData = userTypeBreakdown.getOrDefault(subscriptionType, new UserTypeData());
-                    typeData.count++;
-                    typeData.revenue += amountInDollars;
-                    userTypeBreakdown.put(subscriptionType, typeData);
+                        // Update user type breakdown
+                        UserTypeData typeData = userTypeBreakdown.getOrDefault(subscriptionType, new UserTypeData());
+                        typeData.count++;
+                        typeData.revenue += amountInDollars;
+                        userTypeBreakdown.put(subscriptionType, typeData);
 
-                    // Determine the subscription's billing period
-                    long created = sub.getCreated();
-                    String interval = item.getPrice().getRecurring().getInterval();
-                    long periodStart = sub.getCurrentPeriodStart();
-                    long periodEnd = sub.getCurrentPeriodEnd();
+                        // Determine the subscription's billing period
+                        long created = sub.getCreated();
+                        String interval = item.getPrice().getRecurring().getInterval();
+                        long periodStart = sub.getCurrentPeriodStart();
+                        long periodEnd = sub.getCurrentPeriodEnd();
 
-                    // Assign revenue to this month or last month
-                    if (periodStart >= thisMonthStartEpoch) {
-                        totalRevenueThisMonth += amountInDollars;
-                        // Assign to week based on creation date (simplified)
-                        int weekIndex = Math.min((int) ((created - thisMonthStartEpoch) / (7 * 24 * 3600)), 3);
-                        weeklyRevenueThisMonth.put(weeks[weekIndex], weeklyRevenueThisMonth.get(weeks[weekIndex]) + amountInDollars);
-                    } else if (periodStart >= lastMonthStartEpoch && periodEnd <= lastMonthEndEpoch) {
-                        totalRevenueLastMonth += amountInDollars;
-                        int weekIndex = Math.min((int) ((created - lastMonthStartEpoch) / (7 * 24 * 3600)), 3);
-                        weeklyRevenueLastMonth.put(weeks[weekIndex], weeklyRevenueLastMonth.get(weeks[weekIndex]) + amountInDollars);
+                        // Assign revenue to this month or last month
+                        if (periodStart >= thisMonthStartEpoch) {
+                            totalRevenueThisMonth += amountInDollars;
+                            // Fix weekIndex to prevent negative values
+                            long daysSinceMonthStart = (created - thisMonthStartEpoch) / (24 * 3600);
+                            int weekIndex = Math.min(Math.max((int) (daysSinceMonthStart / 7), 0), 3);
+                            weeklyRevenueThisMonth.put(weeks[weekIndex], weeklyRevenueThisMonth.get(weeks[weekIndex]) + amountInDollars);
+                        } else if (periodStart >= lastMonthStartEpoch && periodEnd <= lastMonthEndEpoch) {
+                            totalRevenueLastMonth += amountInDollars;
+                            long daysSinceLastMonthStart = (created - lastMonthStartEpoch) / (24 * 3600);
+                            int weekIndex = Math.min(Math.max((int) (daysSinceLastMonthStart / 7), 0), 3);
+                            weeklyRevenueLastMonth.put(weeks[weekIndex], weeklyRevenueLastMonth.get(weeks[weekIndex]) + amountInDollars);
+                        }
                     }
+                } catch (Exception e) {
+                    logger.error("Error processing subscription {}: {}", sub.getId(), e.getMessage());
+                    continue; // Skip problematic subscription
                 }
             }
 
@@ -189,6 +215,7 @@ public class AnalyticsController {
             return response;
 
         } catch (Exception e) {
+            logger.error("Unexpected error in getAnalytics: {}", e.getMessage());
             throw new RuntimeException("Error fetching analytics data: " + e.getMessage());
         }
     }
