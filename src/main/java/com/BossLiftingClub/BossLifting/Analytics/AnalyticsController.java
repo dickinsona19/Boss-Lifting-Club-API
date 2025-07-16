@@ -33,7 +33,6 @@ public class AnalyticsController {
     private static final Logger logger = LoggerFactory.getLogger(AnalyticsController.class);
 
 
-
     @Autowired
     private final UserRepository userRepository;
 
@@ -271,11 +270,10 @@ public class AnalyticsController {
             }
 
             // Calculate projected revenue for rest of month (upcoming renewals)
+            Map<String, Integer> userTypeCounts = new HashMap<>();
             for (Subscription sub : filteredSubscriptions) {
                 try {
-                    if (sub.getStatus().equals("active")) {
-                        userCount++;
-                    }
+                    boolean isActive = sub.getStatus().equals("active");
                     for (SubscriptionItem item : sub.getItems().getData()) {
                         String priceId = item.getPrice() != null ? item.getPrice().getId() : null;
                         if (priceId == null || priceId.equals(ignoredPriceId)) continue;
@@ -289,15 +287,16 @@ public class AnalyticsController {
                         long unitAmount = item.getPrice().getUnitAmount();
                         double amountInDollars = unitAmount / 100.0;
 
-                        // Check if subscription renews between now and end of month
-                        if (sub.getStatus().equals("active") && sub.getCurrentPeriodEnd() > currentDateEpoch && sub.getCurrentPeriodEnd() <= thisMonthEndEpoch) {
-                            projectedRevenueRestOfMonth += amountInDollars;
+                        // Update user type breakdown
+                        UserTypeData typeData = userTypeBreakdown.getOrDefault(subscriptionType, new UserTypeData());
+                        if (isActive) {
+                            userTypeCounts.put(subscriptionType, userTypeCounts.getOrDefault(subscriptionType, 0) + 1);
+                        }
 
-                            // Update user type breakdown
-                            UserTypeData typeData = userTypeBreakdown.getOrDefault(subscriptionType, new UserTypeData());
-                            typeData.count = sub.getStatus().equals("active") ? typeData.count + 1 : typeData.count;
+                        // Check if subscription renews between now and end of month
+                        if (isActive && sub.getCurrentPeriodEnd() > currentDateEpoch && sub.getCurrentPeriodEnd() <= thisMonthEndEpoch) {
+                            projectedRevenueRestOfMonth += amountInDollars;
                             typeData.revenue += amountInDollars;
-                            userTypeBreakdown.put(subscriptionType, typeData);
 
                             // Assign to weekly revenue (using current_period_end)
                             long periodEnd = sub.getCurrentPeriodEnd();
@@ -305,6 +304,10 @@ public class AnalyticsController {
                             int weekIndex = Math.min(Math.max((int) (daysSinceMonthStart / 7), 0), 3);
                             weeklyRevenueThisMonthProjected.put(weeks[weekIndex], weeklyRevenueThisMonthProjected.get(weeks[weekIndex]) + amountInDollars);
                         }
+                        userTypeBreakdown.put(subscriptionType, typeData);
+                    }
+                    if (isActive) {
+                        userCount++;
                     }
                 } catch (Exception e) {
                     logger.error("Error processing subscription {}: {}", sub.getId(), e.getMessage());
@@ -312,18 +315,19 @@ public class AnalyticsController {
                 }
             }
 
+            // Set user type counts
+            userTypeBreakdown.forEach((type, data) -> data.setCount(userTypeCounts.getOrDefault(type, 0)));
+
             // Combine actual and projected revenue for total
             double totalRevenueThisMonth = actualRevenueThisMonth + projectedRevenueRestOfMonth;
 
             // Combine weekly revenues (actual up to current week, projected for future weeks)
             int currentWeekIndex = Math.min(Math.max((int) ((currentDateEpoch - thisMonthStartEpoch) / (24 * 3600) / 7), 0), 3);
-            Double[] weeklyRevenueThisMonth = new Double[4];
+            Double[] weeklyRevenueThisMonthActualArray = new Double[4];
+            Double[] weeklyRevenueThisMonthProjectedArray = new Double[4];
             for (int i = 0; i < 4; i++) {
-                if (i <= currentWeekIndex) {
-                    weeklyRevenueThisMonth[i] = weeklyRevenueThisMonthActual.get(weeks[i]);
-                } else {
-                    weeklyRevenueThisMonth[i] = weeklyRevenueThisMonthProjected.get(weeks[i]);
-                }
+                weeklyRevenueThisMonthActualArray[i] = weeklyRevenueThisMonthActual.get(weeks[i]);
+                weeklyRevenueThisMonthProjectedArray[i] = weeklyRevenueThisMonthProjected.get(weeks[i]);
             }
 
             // Calculate metrics
@@ -334,7 +338,7 @@ public class AnalyticsController {
             AnalyticsResponse response = new AnalyticsResponse();
             response.setTotalRevenue(totalRevenueThisMonth);
             response.setUserCount(userCount);
-            response.setProjectedRevenue(totalRevenueThisMonth); // Total of actual + projected
+            response.setProjectedRevenue(projectedRevenueRestOfMonth); // Only upcoming renewals
             response.setMonthlyComparison(new MonthlyComparison(
                     totalRevenueThisMonth,
                     totalRevenueLastMonth,
@@ -342,7 +346,8 @@ public class AnalyticsController {
             ));
             response.setChartData(new ChartData(
                     weeks,
-                    weeklyRevenueThisMonth,
+                    weeklyRevenueThisMonthActualArray,
+                    weeklyRevenueThisMonthProjectedArray,
                     weeklyRevenueLastMonth.values().toArray(new Double[0])
             ));
             response.setUserTypeBreakdown(userTypeBreakdown);
@@ -400,18 +405,21 @@ public class AnalyticsController {
 
     public static class ChartData {
         private String[] labels;
-        private Double[] thisMonth;
+        private Double[] thisMonthActual;
+        private Double[] thisMonthProjected;
         private Double[] lastMonth;
 
-        public ChartData(String[] labels, Double[] thisMonth, Double[] lastMonth) {
+        public ChartData(String[] labels, Double[] thisMonthActual, Double[] thisMonthProjected, Double[] lastMonth) {
             this.labels = labels;
-            this.thisMonth = thisMonth;
+            this.thisMonthActual = thisMonthActual;
+            this.thisMonthProjected = thisMonthProjected;
             this.lastMonth = lastMonth;
         }
 
         // Getters
         public String[] getLabels() { return labels; }
-        public Double[] getThisMonth() { return thisMonth; }
+        public Double[] getThisMonthActual() { return thisMonthActual; }
+        public Double[] getThisMonthProjected() { return thisMonthProjected; }
         public Double[] getLastMonth() { return lastMonth; }
     }
 
