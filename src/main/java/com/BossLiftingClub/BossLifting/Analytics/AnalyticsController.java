@@ -8,6 +8,7 @@ import com.stripe.model.SubscriptionCollection;
 import com.stripe.model.SubscriptionItem;
 import com.stripe.model.SubscriptionItemCollection;
 import com.stripe.param.SubscriptionListParams;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -27,19 +28,14 @@ import java.util.Map;
 @RequestMapping("/api/analytics")
 public class AnalyticsController {
 
-    @Value("${stripe.api.key}")
-    private String stripeApiKey;
 
+    @Autowired
     private final UserRepository userRepository;
 
     public AnalyticsController(UserRepository userRepository) {
         this.userRepository = userRepository;
     }
 
-    @PostConstruct
-    public void init() {
-        Stripe.apiKey = stripeApiKey;
-    }
 
     @GetMapping
     public AnalyticsResponse getAnalytics(@RequestParam String userType) {
