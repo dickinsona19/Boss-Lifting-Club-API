@@ -29,7 +29,8 @@ public class PromoServiceImpl implements PromoService {
                         promo.getCodeToken(),
                         promo.getUsers() != null ?
                                 promo.getUsers().stream().map(UserDTO::new).toList() :
-                                List.of()
+                                List.of(),
+                        promo.getFreePassCount()
                 ))
                 .toList();
     }
@@ -42,7 +43,8 @@ public class PromoServiceImpl implements PromoService {
                 promo.getCodeToken(),
                 promo.getUsers() != null ?
                         promo.getUsers().stream().map(UserDTO::new).toList() :
-                        List.of()
+                        List.of(),
+                promo.getFreePassCount()
         ));
     }
 
@@ -54,7 +56,8 @@ public class PromoServiceImpl implements PromoService {
                 promo.getCodeToken(),
                 promo.getUsers() != null ?
                         promo.getUsers().stream().map(UserDTO::new).toList() :
-                        List.of()
+                        List.of(),
+                promo.getFreePassCount()
         ));
     }
 
