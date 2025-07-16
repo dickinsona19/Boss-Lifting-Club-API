@@ -16,4 +16,6 @@ public interface PromoRepository extends JpaRepository<Promo, Long> {
 
     @Query("SELECT p FROM Promo p LEFT JOIN FETCH p.users WHERE p.codeToken = :codeToken")
     Optional<Promo> findByCodeTokenWithUsers(String codeToken);
+
+
 }

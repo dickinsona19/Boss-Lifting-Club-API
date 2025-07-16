@@ -1,5 +1,7 @@
 package com.BossLiftingClub.BossLifting.User.PotentialUser;
 
+import com.BossLiftingClub.BossLifting.Promo.Promo;
+import com.BossLiftingClub.BossLifting.Promo.PromoRepository;
 import com.BossLiftingClub.BossLifting.User.FirebaseService;
 import jakarta.persistence.*;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -78,13 +80,17 @@ public class PotentialUser {
 }
 
 // Repository
-interface PotentialUserRepository extends JpaRepository<PotentialUser, Long> {}
+interface PotentialUserRepository extends JpaRepository<PotentialUser, Long> {
+    PotentialUser findByEmail(String email);
+}
 
 // Service
 @Service
 class PotentialUserService {
     @Autowired
     private PotentialUserRepository repository;
+    @Autowired
+    private PromoRepository promoRepository;
     private final PotentialUserRepository potentialUserRepository;
 
     public PotentialUserService(PotentialUserRepository potentialUserRepository) {
@@ -94,7 +100,25 @@ class PotentialUserService {
         return repository.findAll();
     }
 
-    public PotentialUser addUser(PotentialUser user) {
+    public PotentialUser addUser(PotentialUser user, String promoCode) {
+        // Check if a user with the same email already exists
+        PotentialUser existingUser = repository.findByEmail(user.getEmail());
+        if (existingUser != null) {
+            return existingUser; // Don't add a new one, return the existing user
+        }
+
+        if (promoCode != null) {
+            // Search for the promo
+            Optional<Promo> optionalPromo = promoRepository.findByCodeToken(promoCode);
+            if (optionalPromo.isPresent()) {
+                Promo promo = optionalPromo.get();
+                // Increment freePassCount if promo exists
+                promo.setFreePassCount(promo.getFreePassCount() + 1);
+                promoRepository.save(promo);
+            }
+        }
+
+        // Save and return the new user
         return repository.save(user);
     }
 
@@ -140,8 +164,8 @@ class PotentialUserController {
     }
 
     @PostMapping
-    public PotentialUser addUser(@RequestBody PotentialUser user) {
-        return service.addUser(user);
+    public PotentialUser addUser(@RequestBody PotentialUser user, @RequestParam("from") String promoCode) {
+        return service.addUser(user, promoCode);
     }
 
     @DeleteMapping("/{id}")

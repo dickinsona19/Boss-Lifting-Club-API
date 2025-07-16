@@ -28,6 +28,9 @@ public class Promo {
     )
     private List<User> users = new ArrayList<>();
 
+    @Column(name = "free_pass_count")
+    private Integer freePassCount = 0;
+
     // Getters and Setters
     public Long getId() {
         return id;
@@ -59,5 +62,13 @@ public class Promo {
 
     public void setUsers(List<User> users) {
         this.users = users;
+    }
+
+    public Integer getFreePassCount() {
+        return freePassCount;
+    }
+
+    public void setFreePassCount(Integer freePassCount) {
+        this.freePassCount = freePassCount;
     }
 }
