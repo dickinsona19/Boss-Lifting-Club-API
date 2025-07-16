@@ -4,8 +4,8 @@ import com.BossLiftingClub.BossLifting.User.User;
 import com.BossLiftingClub.BossLifting.User.UserRepository;
 import com.stripe.Stripe;
 import com.stripe.model.*;
-import com.stripe.param.InvoiceListParams;
 import com.stripe.param.SubscriptionListParams;
+import com.stripe.param.InvoiceListParams;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -14,9 +14,10 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
 import javax.annotation.PostConstruct;
-import java.time.Instant;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -29,10 +30,13 @@ import static com.stripe.param.InvoiceListParams.Status.PAID;
 @RequestMapping("/api/analytics")
 public class AnalyticsController {
 
+    private static final Logger logger = LoggerFactory.getLogger(AnalyticsController.class);
+
+
 
     @Autowired
     private final UserRepository userRepository;
-    private static final Logger logger = LoggerFactory.getLogger(AnalyticsController.class);
+
     public AnalyticsController(UserRepository userRepository) {
         this.userRepository = userRepository;
     }
@@ -48,7 +52,7 @@ public class AnalyticsController {
             priceIds.put("annual", "price_1RJJuTGHcVHSTvgI2pVN6hfx");
             String ignoredPriceId = "price_1RF30SGHcVHSTvgIpegCzQ0m";
 
-            // Fetch all users from existing UserRepository
+            // Fetch all users from UserRepository
             List<User> users;
             try {
                 users = userRepository.findAll();
@@ -60,13 +64,14 @@ public class AnalyticsController {
 
             List<Subscription> relevantSubscriptions = new ArrayList<>();
 
-            // Define time periods for monthly comparison
-            LocalDate now = LocalDate.now();
-            LocalDate startOfThisMonth = now.withDayOfMonth(1);
+            // Define time periods
+            LocalDateTime now = LocalDateTime.now();
+            LocalDate startOfThisMonth = now.toLocalDate().withDayOfMonth(1);
             LocalDate endOfThisMonth = startOfThisMonth.plusMonths(1).minusDays(1);
             LocalDate startOfLastMonth = startOfThisMonth.minusMonths(1);
             LocalDate endOfLastMonth = startOfLastMonth.plusMonths(1).minusDays(1);
             long thisMonthStartEpoch = startOfThisMonth.atStartOfDay(ZoneId.systemDefault()).toEpochSecond();
+            long currentDateEpoch = now.atZone(ZoneId.systemDefault()).toEpochSecond();
             long thisMonthEndEpoch = endOfThisMonth.atTime(23, 59, 59).atZone(ZoneId.systemDefault()).toEpochSecond();
             long lastMonthStartEpoch = startOfLastMonth.atStartOfDay(ZoneId.systemDefault()).toEpochSecond();
             long lastMonthEndEpoch = endOfLastMonth.atTime(23, 59, 59).atZone(ZoneId.systemDefault()).toEpochSecond();
@@ -79,7 +84,6 @@ public class AnalyticsController {
                 }
 
                 try {
-                    // Query all subscriptions for the user’s stripeCustomerId
                     SubscriptionListParams params = SubscriptionListParams.builder()
                             .setCustomer(user.getUserStripeMemberId())
                             .build();
@@ -143,21 +147,77 @@ public class AnalyticsController {
             }
 
             // Calculate analytics metrics
-            double projectedRevenueThisMonth = 0;
+            double actualRevenueThisMonth = 0;
+            double projectedRevenueRestOfMonth = 0;
             double totalRevenueLastMonth = 0;
             int userCount = 0;
             Map<String, UserTypeData> userTypeBreakdown = new HashMap<>();
-            Map<String, Double> weeklyRevenueThisMonth = new HashMap<>();
+            Map<String, Double> weeklyRevenueThisMonthActual = new HashMap<>();
+            Map<String, Double> weeklyRevenueThisMonthProjected = new HashMap<>();
             Map<String, Double> weeklyRevenueLastMonth = new HashMap<>();
             String[] weeks = {"Week 1", "Week 2", "Week 3", "Week 4"};
 
             // Initialize weekly data
             for (String week : weeks) {
-                weeklyRevenueThisMonth.put(week, 0.0);
+                weeklyRevenueThisMonthActual.put(week, 0.0);
+                weeklyRevenueThisMonthProjected.put(week, 0.0);
                 weeklyRevenueLastMonth.put(week, 0.0);
             }
 
-            // Calculate last month's revenue using invoices
+            // Calculate actual revenue this month (invoices paid from start of month to current date)
+            for (User user : users) {
+                if (user.getUserStripeMemberId() == null) continue;
+
+                try {
+                    InvoiceListParams invoiceParams = InvoiceListParams.builder()
+                            .setCustomer(user.getUserStripeMemberId())
+                            .setStatus(PAID)
+                            .setCreated(InvoiceListParams.Created.builder()
+                                    .setGte(thisMonthStartEpoch)
+                                    .setLte(currentDateEpoch)
+                                    .build())
+                            .build();
+
+                    for (Invoice invoice : Invoice.list(invoiceParams).autoPagingIterable()) {
+                        try {
+                            for (com.stripe.model.InvoiceLineItem line : invoice.getLines().getData()) {
+                                String priceId = line.getPrice() != null ? line.getPrice().getId() : null;
+                                if (priceId == null || priceId.equals(ignoredPriceId)) continue;
+
+                                String subscriptionType = priceIds.entrySet().stream()
+                                        .filter(entry -> entry.getValue().equals(priceId))
+                                        .map(Map.Entry::getKey)
+                                        .findFirst()
+                                        .orElse("misc");
+
+                                if (!userType.equals("all") && !userType.equals(subscriptionType) && !(userType.equals("misc") && !priceIds.containsValue(priceId))) {
+                                    continue;
+                                }
+
+                                double amountInDollars = line.getAmount() / 100.0;
+                                actualRevenueThisMonth += amountInDollars;
+
+                                long created = invoice.getCreated();
+                                long daysSinceMonthStart = (created - thisMonthStartEpoch) / (24 * 3600);
+                                int weekIndex = Math.min(Math.max((int) (daysSinceMonthStart / 7), 0), 3);
+                                weeklyRevenueThisMonthActual.put(weeks[weekIndex], weeklyRevenueThisMonthActual.get(weeks[weekIndex]) + amountInDollars);
+
+                                UserTypeData typeData = userTypeBreakdown.getOrDefault(subscriptionType, new UserTypeData());
+                                typeData.revenue += amountInDollars;
+                                userTypeBreakdown.put(subscriptionType, typeData);
+                            }
+                        } catch (Exception e) {
+                            logger.error("Error processing invoice {} for user {}: {}", invoice.getId(), user.getId(), e.getMessage());
+                            continue;
+                        }
+                    }
+                } catch (Exception e) {
+                    logger.error("Error fetching invoices for user {}: {}", user.getId(), e.getMessage());
+                    continue;
+                }
+            }
+
+            // Calculate last month's revenue (invoices paid last month)
             for (User user : users) {
                 if (user.getUserStripeMemberId() == null) continue;
 
@@ -210,7 +270,7 @@ public class AnalyticsController {
                 }
             }
 
-            // Calculate projected revenue and user count based on upcoming renewals
+            // Calculate projected revenue for rest of month (upcoming renewals)
             for (Subscription sub : filteredSubscriptions) {
                 try {
                     if (sub.getStatus().equals("active")) {
@@ -229,9 +289,9 @@ public class AnalyticsController {
                         long unitAmount = item.getPrice().getUnitAmount();
                         double amountInDollars = unitAmount / 100.0;
 
-                        // Check if subscription renews this month
-                        if (sub.getStatus().equals("active") && sub.getCurrentPeriodEnd() >= thisMonthStartEpoch && sub.getCurrentPeriodEnd() <= thisMonthEndEpoch) {
-                            projectedRevenueThisMonth += amountInDollars;
+                        // Check if subscription renews between now and end of month
+                        if (sub.getStatus().equals("active") && sub.getCurrentPeriodEnd() > currentDateEpoch && sub.getCurrentPeriodEnd() <= thisMonthEndEpoch) {
+                            projectedRevenueRestOfMonth += amountInDollars;
 
                             // Update user type breakdown
                             UserTypeData typeData = userTypeBreakdown.getOrDefault(subscriptionType, new UserTypeData());
@@ -243,7 +303,7 @@ public class AnalyticsController {
                             long periodEnd = sub.getCurrentPeriodEnd();
                             long daysSinceMonthStart = (periodEnd - thisMonthStartEpoch) / (24 * 3600);
                             int weekIndex = Math.min(Math.max((int) (daysSinceMonthStart / 7), 0), 3);
-                            weeklyRevenueThisMonth.put(weeks[weekIndex], weeklyRevenueThisMonth.get(weeks[weekIndex]) + amountInDollars);
+                            weeklyRevenueThisMonthProjected.put(weeks[weekIndex], weeklyRevenueThisMonthProjected.get(weeks[weekIndex]) + amountInDollars);
                         }
                     }
                 } catch (Exception e) {
@@ -252,29 +312,43 @@ public class AnalyticsController {
                 }
             }
 
+            // Combine actual and projected revenue for total
+            double totalRevenueThisMonth = actualRevenueThisMonth + projectedRevenueRestOfMonth;
+
+            // Combine weekly revenues (actual up to current week, projected for future weeks)
+            int currentWeekIndex = Math.min(Math.max((int) ((currentDateEpoch - thisMonthStartEpoch) / (24 * 3600) / 7), 0), 3);
+            Double[] weeklyRevenueThisMonth = new Double[4];
+            for (int i = 0; i < 4; i++) {
+                if (i <= currentWeekIndex) {
+                    weeklyRevenueThisMonth[i] = weeklyRevenueThisMonthActual.get(weeks[i]);
+                } else {
+                    weeklyRevenueThisMonth[i] = weeklyRevenueThisMonthProjected.get(weeks[i]);
+                }
+            }
+
             // Calculate metrics
             double percentageChange = totalRevenueLastMonth > 0 ?
-                    ((projectedRevenueThisMonth - totalRevenueLastMonth) / totalRevenueLastMonth) * 100 : 0;
+                    ((totalRevenueThisMonth - totalRevenueLastMonth) / totalRevenueLastMonth) * 100 : 0;
 
             // Prepare response
             AnalyticsResponse response = new AnalyticsResponse();
-            response.setTotalRevenue(projectedRevenueThisMonth);
+            response.setTotalRevenue(totalRevenueThisMonth);
             response.setUserCount(userCount);
-            response.setProjectedRevenue(projectedRevenueThisMonth);
+            response.setProjectedRevenue(totalRevenueThisMonth); // Total of actual + projected
             response.setMonthlyComparison(new MonthlyComparison(
-                    projectedRevenueThisMonth,
+                    totalRevenueThisMonth,
                     totalRevenueLastMonth,
                     percentageChange
             ));
             response.setChartData(new ChartData(
                     weeks,
-                    weeklyRevenueThisMonth.values().toArray(new Double[0]),
+                    weeklyRevenueThisMonth,
                     weeklyRevenueLastMonth.values().toArray(new Double[0])
             ));
             response.setUserTypeBreakdown(userTypeBreakdown);
 
-            logger.info("Analytics processed successfully for userType={}: projectedRevenue={}, lastMonthRevenue={}, userCount={}",
-                    userType, projectedRevenueThisMonth, totalRevenueLastMonth, userCount);
+            logger.info("Analytics processed successfully for userType={}: actualRevenueThisMonth={}, projectedRevenueRestOfMonth={}, totalRevenueThisMonth={}, lastMonthRevenue={}, userCount={}",
+                    userType, actualRevenueThisMonth, projectedRevenueRestOfMonth, totalRevenueThisMonth, totalRevenueLastMonth, userCount);
             return response;
 
         } catch (Exception e) {
