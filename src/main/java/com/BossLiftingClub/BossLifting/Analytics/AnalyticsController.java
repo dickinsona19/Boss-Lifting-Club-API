@@ -24,13 +24,12 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-import static com.stripe.param.InvoiceListParams.Status.PAID;
-
 @RestController
 @RequestMapping("/api/analytics")
 public class AnalyticsController {
 
     private static final Logger logger = LoggerFactory.getLogger(AnalyticsController.class);
+
 
 
     @Autowired
@@ -154,6 +153,7 @@ public class AnalyticsController {
             Map<String, Double> weeklyRevenueThisMonthActual = new HashMap<>();
             Map<String, Double> weeklyRevenueThisMonthProjected = new HashMap<>();
             Map<String, Double> weeklyRevenueLastMonth = new HashMap<>();
+            Map<String, Integer> userTypeCounts = new HashMap<>();
             String[] weeks = {"Week 1", "Week 2", "Week 3", "Week 4"};
 
             // Initialize weekly data
@@ -163,6 +163,48 @@ public class AnalyticsController {
                 weeklyRevenueLastMonth.put(week, 0.0);
             }
 
+            // Calculate lifetime revenue for userTypeBreakdown
+            for (User user : users) {
+                if (user.getUserStripeMemberId() == null) continue;
+
+                try {
+                    InvoiceListParams invoiceParams = InvoiceListParams.builder()
+                            .setCustomer(user.getUserStripeMemberId())
+                            .setStatus(InvoiceListParams.Status.PAID)
+                            .build();
+
+                    for (Invoice invoice : Invoice.list(invoiceParams).autoPagingIterable()) {
+                        try {
+                            for (com.stripe.model.InvoiceLineItem line : invoice.getLines().getData()) {
+                                String priceId = line.getPrice() != null ? line.getPrice().getId() : null;
+                                if (priceId == null || priceId.equals(ignoredPriceId)) continue;
+
+                                String subscriptionType = priceIds.entrySet().stream()
+                                        .filter(entry -> entry.getValue().equals(priceId))
+                                        .map(Map.Entry::getKey)
+                                        .findFirst()
+                                        .orElse("misc");
+
+                                if (!userType.equals("all") && !userType.equals(subscriptionType) && !(userType.equals("misc") && !priceIds.containsValue(priceId))) {
+                                    continue;
+                                }
+
+                                double amountInDollars = line.getAmount() / 100.0;
+                                UserTypeData typeData = userTypeBreakdown.getOrDefault(subscriptionType, new UserTypeData());
+                                typeData.revenue += amountInDollars;
+                                userTypeBreakdown.put(subscriptionType, typeData);
+                            }
+                        } catch (Exception e) {
+                            logger.error("Error processing invoice {} for user {}: {}", invoice.getId(), user.getId(), e.getMessage());
+                            continue;
+                        }
+                    }
+                } catch (Exception e) {
+                    logger.error("Error fetching lifetime invoices for user {}: {}", user.getId(), e.getMessage());
+                    continue;
+                }
+            }
+
             // Calculate actual revenue this month (invoices paid from start of month to current date)
             for (User user : users) {
                 if (user.getUserStripeMemberId() == null) continue;
@@ -170,7 +212,7 @@ public class AnalyticsController {
                 try {
                     InvoiceListParams invoiceParams = InvoiceListParams.builder()
                             .setCustomer(user.getUserStripeMemberId())
-                            .setStatus(PAID)
+                            .setStatus(InvoiceListParams.Status.PAID)
                             .setCreated(InvoiceListParams.Created.builder()
                                     .setGte(thisMonthStartEpoch)
                                     .setLte(currentDateEpoch)
@@ -197,13 +239,9 @@ public class AnalyticsController {
                                 actualRevenueThisMonth += amountInDollars;
 
                                 long created = invoice.getCreated();
-                                long daysSinceMonthStart = (created - thisMonthStartEpoch) / (24 * 3600);
-                                int weekIndex = Math.min(Math.max((int) (daysSinceMonthStart / 7), 0), 3);
+                                long daysInMonth = (created - thisMonthStartEpoch) / (24 * 3600);
+                                int weekIndex = Math.min(Math.max((int) (daysInMonth / 7), 0), 3);
                                 weeklyRevenueThisMonthActual.put(weeks[weekIndex], weeklyRevenueThisMonthActual.get(weeks[weekIndex]) + amountInDollars);
-
-                                UserTypeData typeData = userTypeBreakdown.getOrDefault(subscriptionType, new UserTypeData());
-                                typeData.revenue += amountInDollars;
-                                userTypeBreakdown.put(subscriptionType, typeData);
                             }
                         } catch (Exception e) {
                             logger.error("Error processing invoice {} for user {}: {}", invoice.getId(), user.getId(), e.getMessage());
@@ -223,7 +261,7 @@ public class AnalyticsController {
                 try {
                     InvoiceListParams invoiceParams = InvoiceListParams.builder()
                             .setCustomer(user.getUserStripeMemberId())
-                            .setStatus(PAID)
+                            .setStatus(InvoiceListParams.Status.PAID)
                             .setCreated(InvoiceListParams.Created.builder()
                                     .setGte(lastMonthStartEpoch)
                                     .setLte(lastMonthEndEpoch)
@@ -250,13 +288,9 @@ public class AnalyticsController {
                                 totalRevenueLastMonth += amountInDollars;
 
                                 long created = invoice.getCreated();
-                                long daysSinceLastMonthStart = (created - lastMonthStartEpoch) / (24 * 3600);
-                                int weekIndex = Math.min(Math.max((int) (daysSinceLastMonthStart / 7), 0), 3);
+                                long daysInMonth = (created - lastMonthStartEpoch) / (24 * 3600);
+                                int weekIndex = Math.min(Math.max((int) (daysInMonth / 7), 0), 3);
                                 weeklyRevenueLastMonth.put(weeks[weekIndex], weeklyRevenueLastMonth.get(weeks[weekIndex]) + amountInDollars);
-
-                                UserTypeData typeData = userTypeBreakdown.getOrDefault(subscriptionType, new UserTypeData());
-                                typeData.revenue += amountInDollars;
-                                userTypeBreakdown.put(subscriptionType, typeData);
                             }
                         } catch (Exception e) {
                             logger.error("Error processing invoice {} for user {}: {}", invoice.getId(), user.getId(), e.getMessage());
@@ -270,10 +304,10 @@ public class AnalyticsController {
             }
 
             // Calculate projected revenue for rest of month (upcoming renewals)
-            Map<String, Integer> userTypeCounts = new HashMap<>();
             for (Subscription sub : filteredSubscriptions) {
                 try {
-                    boolean isActive = sub.getStatus().equals("active");
+                    if (!sub.getStatus().equals("active")) continue;
+
                     for (SubscriptionItem item : sub.getItems().getData()) {
                         String priceId = item.getPrice() != null ? item.getPrice().getId() : null;
                         if (priceId == null || priceId.equals(ignoredPriceId)) continue;
@@ -284,31 +318,25 @@ public class AnalyticsController {
                                 .findFirst()
                                 .orElse("misc");
 
+                        if (!userType.equals("all") && !userType.equals(subscriptionType) && !(userType.equals("misc") && !priceIds.containsValue(priceId))) {
+                            continue;
+                        }
+
+                        userTypeCounts.compute(subscriptionType, (k, v) -> (v == null) ? 1 : v + 1);
+
                         long unitAmount = item.getPrice().getUnitAmount();
                         double amountInDollars = unitAmount / 100.0;
 
-                        // Update user type breakdown
-                        UserTypeData typeData = userTypeBreakdown.getOrDefault(subscriptionType, new UserTypeData());
-                        if (isActive) {
-                            userTypeCounts.put(subscriptionType, userTypeCounts.getOrDefault(subscriptionType, 0) + 1);
-                        }
-
-                        // Check if subscription renews between now and end of month
-                        if (isActive && sub.getCurrentPeriodEnd() > currentDateEpoch && sub.getCurrentPeriodEnd() <= thisMonthEndEpoch) {
+                        if (sub.getCurrentPeriodEnd() > currentDateEpoch && sub.getCurrentPeriodEnd() <= thisMonthEndEpoch) {
                             projectedRevenueRestOfMonth += amountInDollars;
-                            typeData.revenue += amountInDollars;
 
-                            // Assign to weekly revenue (using current_period_end)
                             long periodEnd = sub.getCurrentPeriodEnd();
-                            long daysSinceMonthStart = (periodEnd - thisMonthStartEpoch) / (24 * 3600);
-                            int weekIndex = Math.min(Math.max((int) (daysSinceMonthStart / 7), 0), 3);
+                            long daysInMonth = (periodEnd - thisMonthStartEpoch) / (24 * 3600);
+                            int weekIndex = Math.min(Math.max((int) (daysInMonth / 7), 0), 3);
                             weeklyRevenueThisMonthProjected.put(weeks[weekIndex], weeklyRevenueThisMonthProjected.get(weeks[weekIndex]) + amountInDollars);
                         }
-                        userTypeBreakdown.put(subscriptionType, typeData);
                     }
-                    if (isActive) {
-                        userCount++;
-                    }
+                    userCount++;
                 } catch (Exception e) {
                     logger.error("Error processing subscription {}: {}", sub.getId(), e.getMessage());
                     continue;
@@ -321,8 +349,7 @@ public class AnalyticsController {
             // Combine actual and projected revenue for total
             double totalRevenueThisMonth = actualRevenueThisMonth + projectedRevenueRestOfMonth;
 
-            // Combine weekly revenues (actual up to current week, projected for future weeks)
-            int currentWeekIndex = Math.min(Math.max((int) ((currentDateEpoch - thisMonthStartEpoch) / (24 * 3600) / 7), 0), 3);
+            // Prepare chart data
             Double[] weeklyRevenueThisMonthActualArray = new Double[4];
             Double[] weeklyRevenueThisMonthProjectedArray = new Double[4];
             for (int i = 0; i < 4; i++) {
@@ -338,7 +365,7 @@ public class AnalyticsController {
             AnalyticsResponse response = new AnalyticsResponse();
             response.setTotalRevenue(totalRevenueThisMonth);
             response.setUserCount(userCount);
-            response.setProjectedRevenue(projectedRevenueRestOfMonth); // Only upcoming renewals
+            response.setProjectedRevenue(projectedRevenueRestOfMonth);
             response.setMonthlyComparison(new MonthlyComparison(
                     totalRevenueThisMonth,
                     totalRevenueLastMonth,
@@ -371,7 +398,6 @@ public class AnalyticsController {
         private ChartData chartData;
         private Map<String, UserTypeData> userTypeBreakdown;
 
-        // Getters and setters
         public double getTotalRevenue() { return totalRevenue; }
         public void setTotalRevenue(double totalRevenue) { this.totalRevenue = totalRevenue; }
         public int getUserCount() { return userCount; }
@@ -397,7 +423,6 @@ public class AnalyticsController {
             this.percentageChange = percentageChange;
         }
 
-        // Getters
         public double getThisMonth() { return thisMonth; }
         public double getLastMonth() { return lastMonth; }
         public double getPercentageChange() { return percentageChange; }
@@ -416,7 +441,6 @@ public class AnalyticsController {
             this.lastMonth = lastMonth;
         }
 
-        // Getters
         public String[] getLabels() { return labels; }
         public Double[] getThisMonthActual() { return thisMonthActual; }
         public Double[] getThisMonthProjected() { return thisMonthProjected; }
@@ -427,7 +451,6 @@ public class AnalyticsController {
         private int count;
         private double revenue;
 
-        // Getters and setters
         public int getCount() { return count; }
         public void setCount(int count) { this.count = count; }
         public double getRevenue() { return revenue; }
