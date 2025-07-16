@@ -31,13 +31,13 @@ public class AnalyticsController {
     private static final Logger logger = LoggerFactory.getLogger(AnalyticsController.class);
 
 
-
     @Autowired
     private final UserRepository userRepository;
 
     public AnalyticsController(UserRepository userRepository) {
         this.userRepository = userRepository;
     }
+
 
 
     @GetMapping
@@ -118,7 +118,7 @@ public class AnalyticsController {
 
             // Filter subscriptions by user type
             List<Subscription> filteredSubscriptions = new ArrayList<>();
-            if (!userType.equals("all")) {
+            if (!userType.equals("all") && priceIds.containsKey(userType)) {
                 String targetPriceId = priceIds.get(userType);
                 for (Subscription sub : relevantSubscriptions) {
                     try {
@@ -346,8 +346,11 @@ public class AnalyticsController {
             // Set user type counts
             userTypeBreakdown.forEach((type, data) -> data.setCount(userTypeCounts.getOrDefault(type, 0)));
 
-            // Combine actual and projected revenue for total
-            double totalRevenueThisMonth = actualRevenueThisMonth + projectedRevenueRestOfMonth;
+            // Calculate total revenue for this month (actual only)
+            double totalRevenueThisMonth = actualRevenueThisMonth;
+
+            // Calculate combined total for display
+            double combinedTotal = actualRevenueThisMonth + projectedRevenueRestOfMonth;
 
             // Prepare chart data
             Double[] weeklyRevenueThisMonthActualArray = new Double[4];
@@ -369,7 +372,8 @@ public class AnalyticsController {
             response.setMonthlyComparison(new MonthlyComparison(
                     totalRevenueThisMonth,
                     totalRevenueLastMonth,
-                    percentageChange
+                    percentageChange,
+                    combinedTotal
             ));
             response.setChartData(new ChartData(
                     weeks,
@@ -379,8 +383,8 @@ public class AnalyticsController {
             ));
             response.setUserTypeBreakdown(userTypeBreakdown);
 
-            logger.info("Analytics processed successfully for userType={}: actualRevenueThisMonth={}, projectedRevenueRestOfMonth={}, totalRevenueThisMonth={}, lastMonthRevenue={}, userCount={}",
-                    userType, actualRevenueThisMonth, projectedRevenueRestOfMonth, totalRevenueThisMonth, totalRevenueLastMonth, userCount);
+            logger.info("Analytics processed successfully for userType={}: actualRevenueThisMonth={}, projectedRevenueRestOfMonth={}, totalRevenueThisMonth={}, combinedTotal={}, lastMonthRevenue={}, userCount={}",
+                    userType, actualRevenueThisMonth, projectedRevenueRestOfMonth, totalRevenueThisMonth, combinedTotal, totalRevenueLastMonth, userCount);
             return response;
 
         } catch (Exception e) {
@@ -416,16 +420,19 @@ public class AnalyticsController {
         private double thisMonth;
         private double lastMonth;
         private double percentageChange;
+        private double total;
 
-        public MonthlyComparison(double thisMonth, double lastMonth, double percentageChange) {
+        public MonthlyComparison(double thisMonth, double lastMonth, double percentageChange, double total) {
             this.thisMonth = thisMonth;
             this.lastMonth = lastMonth;
             this.percentageChange = percentageChange;
+            this.total = total;
         }
 
         public double getThisMonth() { return thisMonth; }
         public double getLastMonth() { return lastMonth; }
         public double getPercentageChange() { return percentageChange; }
+        public double getTotal() { return total; }
     }
 
     public static class ChartData {
