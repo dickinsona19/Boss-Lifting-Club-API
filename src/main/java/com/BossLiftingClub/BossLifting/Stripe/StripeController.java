@@ -103,9 +103,8 @@ public class StripeController {
                         User user = createUserFromSession(session, customerId);
                         System.out.println("User created with ID: " + user.getId() + " for customer: " + customerId);
 
-                        // Create subscriptions (assuming this method exists from previous request)
-                        createSubscriptions(customerId, paymentMethodId, user.isLockedInRate(), session.getMetadata().get("promoToken") );
-
+                        // Create subscriptions
+                        createSubscriptions(customerId, paymentMethodId, user.isLockedInRate(), session.getMetadata().get("promoToken"));
                     } else {
                         // No payment method provided, delete the Stripe customer
                         System.out.println("No payment method attached in setup intent: " + setupIntentId);
@@ -154,7 +153,6 @@ public class StripeController {
             try {
                 String referrerStripeId = referrer.getUserStripeMemberId();
                 if (referrerStripeId != null) {
-                    // Retrieve the referrer's subscription
                     SubscriptionListParams subscriptionParams = SubscriptionListParams.builder()
                             .setCustomer(referrerStripeId)
                             .build();
@@ -176,16 +174,13 @@ public class StripeController {
                         if (referrerSubscription == null) {
                             System.err.println("No matching subscription found for referrer with Stripe ID: " + referrerStripeId);
                         } else {
-                            // Check if subscription already has a coupon
                             if (referrerSubscription.getDiscount() != null && referrerSubscription.getDiscount().getCoupon() != null) {
-                                // Extend existing coupon duration by 1 month
                                 Coupon existingCoupon = referrerSubscription.getDiscount().getCoupon();
-                                Long newDurationInMonths = 1L; // Default to 1 month if no duration specified
+                                Long newDurationInMonths = 1L;
                                 if (existingCoupon.getDurationInMonths() != null) {
                                     newDurationInMonths = existingCoupon.getDurationInMonths() + 1;
                                 }
 
-                                // Create a new coupon with extended duration
                                 CouponCreateParams couponParams = CouponCreateParams.builder()
                                         .setPercentOff(BigDecimal.valueOf(100.0))
                                         .setDuration(CouponCreateParams.Duration.REPEATING)
@@ -194,14 +189,12 @@ public class StripeController {
                                         .build();
                                 Coupon newCoupon = Coupon.create(couponParams);
 
-                                // Update subscription with new coupon
                                 SubscriptionUpdateParams updateParams = SubscriptionUpdateParams.builder()
                                         .setCoupon(newCoupon.getId())
                                         .build();
                                 Subscription updatedSubscription = referrerSubscription.update(updateParams);
                                 System.out.println("Extended coupon applied to referrer's subscription: " + updatedSubscription.getId());
                             } else {
-                                // Create a new 100% off coupon for 1 month
                                 CouponCreateParams couponParams = CouponCreateParams.builder()
                                         .setPercentOff(BigDecimal.valueOf(100.0))
                                         .setDuration(CouponCreateParams.Duration.REPEATING)
@@ -210,7 +203,6 @@ public class StripeController {
                                         .build();
                                 Coupon coupon = Coupon.create(couponParams);
 
-                                // Apply the coupon to the referrer's subscription
                                 SubscriptionUpdateParams updateParams = SubscriptionUpdateParams.builder()
                                         .setCoupon(coupon.getId())
                                         .build();
@@ -224,11 +216,10 @@ public class StripeController {
                 }
             } catch (StripeException e) {
                 System.err.println("Error applying referral coupon: " + e.getMessage());
-                // Log the error but don't fail the user creation
             }
         }
 
-        user.setIsInGoodStanding(false); // Still false until payment succeeds later
+        user.setIsInGoodStanding(false);
         UserTitles foundingUserTitle = userTitlesRepository.findByTitle(metadata.get("userTitle"))
                 .orElseThrow(() -> new RuntimeException("Founding user title not found in database"));
         Membership membership = membershipRepository.findByName(metadata.get("membership"))
@@ -240,7 +231,6 @@ public class StripeController {
         System.out.println("getReferredMembersDto: " + user.getReferredMembersDto());
         userService.save(user);
 
-        System.out.println(metadata.get("promoToken") +": INside the create sub");
         String promoToken = metadata.get("promoToken");
         if (promoToken != null) {
             promoService.addUserToPromo(promoToken, user.getId());
@@ -250,8 +240,6 @@ public class StripeController {
 
         return user;
     }
-
-
     @PostMapping("/signupWithCard")
     public ResponseEntity<Map<String, String>> signupWithCard(@RequestBody UserRequest userRequest) {
         try {
@@ -529,27 +517,25 @@ public class StripeController {
             throw e;
         }
     }
-
-    public void processApplicationFee(String customerId, String applicationFeePriceId, String PromoToken) throws Exception {
+    public void processApplicationFee(String customerId, String applicationFeePriceId, String promoToken) throws Exception {
         // Fetch all promos
         List<PromoDTO> promos = promoService.findAll();
 
-        // Check if PromoToken matches any promo's codeToken (case-insensitive)
-        boolean isValidPromo = promos.stream()
+        // Check if promoToken matches any promo's codeToken (case-insensitive)
+        boolean isValidPromo = promoToken != null && promos.stream()
                 .anyMatch(promo -> promo.getCodeToken() != null &&
-                        promo.getCodeToken().toUpperCase(Locale.ROOT).equals(PromoToken.toUpperCase(Locale.ROOT)));
+                        promo.getCodeToken().toUpperCase(Locale.ROOT).equals(promoToken.toUpperCase(Locale.ROOT)));
 
         // If no valid promo is found, create the invoice item and invoice
         if (!isValidPromo) {
             InvoiceItemCreateParams invoiceItemParams = InvoiceItemCreateParams.builder()
                     .setCustomer(customerId)
-                    .setPrice(applicationFeePriceId) // One-time $50 application fee
+                    .setPrice(applicationFeePriceId)
                     .setQuantity(1L)
                     .build();
 
             InvoiceItem invoiceItem = InvoiceItem.create(invoiceItemParams);
 
-            // Create and finalize an invoice for the application fee
             Invoice invoice = Invoice.create(
                     InvoiceCreateParams.builder()
                             .setCustomer(customerId)
@@ -559,6 +545,7 @@ public class StripeController {
             invoice.finalizeInvoice();
         }
     }
+
 
 
     @PostMapping("/{userId}/sendPasswordEmail")
