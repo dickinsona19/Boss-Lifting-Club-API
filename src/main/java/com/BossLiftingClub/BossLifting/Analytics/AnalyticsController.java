@@ -8,12 +8,14 @@ import com.stripe.param.SubscriptionListParams;
 import com.stripe.param.InvoiceListParams;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import com.fasterxml.jackson.databind.ObjectMapper;
 
 import javax.annotation.PostConstruct;
 import java.time.LocalDate;
@@ -34,14 +36,74 @@ public class AnalyticsController {
     @Autowired
     private final UserRepository userRepository;
 
-    public AnalyticsController(UserRepository userRepository) {
-        this.userRepository = userRepository;
-    }
+    @Autowired
+    private final AnalyticsCacheRepository analyticsCacheRepository;
 
+    @Autowired
+    private final ObjectMapper objectMapper;
+
+    public AnalyticsController(UserRepository userRepository, AnalyticsCacheRepository analyticsCacheRepository, ObjectMapper objectMapper) {
+        this.userRepository = userRepository;
+        this.analyticsCacheRepository = analyticsCacheRepository;
+        this.objectMapper = objectMapper;
+    }
 
 
     @GetMapping
     public AnalyticsResponse getAnalytics(@RequestParam String userType) {
+        try {
+            // Validate userType
+            if (!userType.equals("all") && !userType.equals("founder") && !userType.equals("monthly") && !userType.equals("annual") && !userType.equals("misc")) {
+                throw new IllegalArgumentException("Invalid userType: " + userType);
+            }
+
+            // Check cache first
+            AnalyticsCache cache = analyticsCacheRepository.findById(userType).orElse(null);
+            if (cache != null && cache.getLastUpdated() != null &&
+                    cache.getLastUpdated().isAfter(LocalDateTime.now().minusHours(12))) {
+                logger.info("Serving cached analytics data for userType={}", userType);
+                return objectMapper.readValue(cache.getAnalyticsData(), AnalyticsResponse.class);
+            }
+
+            // Calculate live data if cache is empty or stale
+            AnalyticsResponse response = calculateAnalytics(userType);
+
+            // Save to cache
+            AnalyticsCache newCache = new AnalyticsCache();
+            newCache.setUserType(userType);
+            newCache.setAnalyticsData(objectMapper.writeValueAsString(response));
+            newCache.setLastUpdated(LocalDateTime.now());
+            analyticsCacheRepository.save(newCache);
+
+            logger.info("Calculated and cached analytics data for userType={}", userType);
+            return response;
+        } catch (Exception e) {
+            logger.error("Unexpected error in getAnalytics for userType={}: {}", userType, e.getMessage(), e);
+            throw new RuntimeException("Error fetching analytics data: " + e.getMessage());
+        }
+    }
+
+    @Scheduled(cron = "0 0 0,12 * * ?") // Run at 00:00 and 12:00 daily
+    public void updateAnalyticsCache() {
+        try {
+            logger.info("Starting scheduled analytics cache update");
+            String[] userTypes = {"all", "founder", "monthly", "annual", "misc"};
+            for (String userType : userTypes) {
+                AnalyticsResponse response = calculateAnalytics(userType);
+                AnalyticsCache cache = new AnalyticsCache();
+                cache.setUserType(userType);
+                cache.setAnalyticsData(objectMapper.writeValueAsString(response));
+                cache.setLastUpdated(LocalDateTime.now());
+                analyticsCacheRepository.save(cache);
+                logger.info("Cached analytics data for userType={}", userType);
+            }
+            logger.info("Completed scheduled analytics cache update");
+        } catch (Exception e) {
+            logger.error("Error updating analytics cache: {}", e.getMessage(), e);
+        }
+    }
+
+    private AnalyticsResponse calculateAnalytics(String userType) {
         try {
             // Define Price IDs for categorization
             Map<String, String> priceIds = new HashMap<>();
@@ -118,7 +180,7 @@ public class AnalyticsController {
 
             // Filter subscriptions by user type
             List<Subscription> filteredSubscriptions = new ArrayList<>();
-            if (!userType.equals("all") && priceIds.containsKey(userType)) {
+            if (!userType.equals("all")) {
                 String targetPriceId = priceIds.get(userType);
                 for (Subscription sub : relevantSubscriptions) {
                     try {
@@ -385,11 +447,11 @@ public class AnalyticsController {
 
             logger.info("Analytics processed successfully for userType={}: actualRevenueThisMonth={}, projectedRevenueRestOfMonth={}, totalRevenueThisMonth={}, combinedTotal={}, lastMonthRevenue={}, userCount={}",
                     userType, actualRevenueThisMonth, projectedRevenueRestOfMonth, totalRevenueThisMonth, combinedTotal, totalRevenueLastMonth, userCount);
-            return response;
 
+            return response;
         } catch (Exception e) {
-            logger.error("Unexpected error in getAnalytics: {}", e.getMessage(), e);
-            throw new RuntimeException("Error fetching analytics data: " + e.getMessage());
+            logger.error("Error in calculateAnalytics for userType={}: {}", userType, e.getMessage(), e);
+            throw new RuntimeException("Error calculating analytics data: " + e.getMessage());
         }
     }
 
