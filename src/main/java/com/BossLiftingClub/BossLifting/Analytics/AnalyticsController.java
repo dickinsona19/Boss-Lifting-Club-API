@@ -9,6 +9,7 @@ import com.stripe.param.InvoiceListParams;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.scheduling.annotation.Scheduled;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -17,7 +18,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
-import javax.annotation.PostConstruct;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
@@ -25,6 +25,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 @RestController
 @RequestMapping("/api/analytics")
@@ -50,6 +51,7 @@ public class AnalyticsController {
 
 
     @GetMapping
+    @Transactional
     public AnalyticsResponse getAnalytics(@RequestParam String userType) {
         try {
             // Validate userType
@@ -58,22 +60,24 @@ public class AnalyticsController {
             }
 
             // Check cache first
-            AnalyticsCache cache = analyticsCacheRepository.findById(userType).orElse(null);
-            if (cache != null && cache.getLastUpdated() != null &&
-                    cache.getLastUpdated().isAfter(LocalDateTime.now().minusHours(12))) {
-                logger.info("Serving cached analytics data for userType={}", userType);
-                return objectMapper.readValue(cache.getAnalyticsData(), AnalyticsResponse.class);
+            Optional<AnalyticsCache> cacheOptional = analyticsCacheRepository.findById(userType);
+            if (cacheOptional.isPresent()) {
+                AnalyticsCache cache = cacheOptional.get();
+                if (cache.getLastUpdated() != null && cache.getLastUpdated().isAfter(LocalDateTime.now().minusHours(12))) {
+                    logger.info("Serving cached analytics data for userType={}", userType);
+                    return objectMapper.readValue(cache.getAnalyticsData(), AnalyticsResponse.class);
+                }
             }
 
             // Calculate live data if cache is empty or stale
             AnalyticsResponse response = calculateAnalytics(userType);
 
-            // Save to cache
-            AnalyticsCache newCache = new AnalyticsCache();
-            newCache.setUserType(userType);
-            newCache.setAnalyticsData(objectMapper.writeValueAsString(response));
-            newCache.setLastUpdated(LocalDateTime.now());
-            analyticsCacheRepository.save(newCache);
+            // Save or update cache
+            AnalyticsCache cache = cacheOptional.orElse(new AnalyticsCache());
+            cache.setUserType(userType);
+            cache.setAnalyticsData(objectMapper.writeValueAsString(response));
+            cache.setLastUpdated(LocalDateTime.now());
+            analyticsCacheRepository.save(cache);
 
             logger.info("Calculated and cached analytics data for userType={}", userType);
             return response;
@@ -84,13 +88,15 @@ public class AnalyticsController {
     }
 
     @Scheduled(cron = "0 0 0,12 * * ?") // Run at 00:00 and 12:00 daily
+    @Transactional
     public void updateAnalyticsCache() {
         try {
             logger.info("Starting scheduled analytics cache update");
             String[] userTypes = {"all", "founder", "monthly", "annual", "misc"};
             for (String userType : userTypes) {
                 AnalyticsResponse response = calculateAnalytics(userType);
-                AnalyticsCache cache = new AnalyticsCache();
+                Optional<AnalyticsCache> cacheOptional = analyticsCacheRepository.findById(userType);
+                AnalyticsCache cache = cacheOptional.orElse(new AnalyticsCache());
                 cache.setUserType(userType);
                 cache.setAnalyticsData(objectMapper.writeValueAsString(response));
                 cache.setLastUpdated(LocalDateTime.now());
