@@ -824,12 +824,16 @@ public class StripeController {
 
 
     @PostMapping("/cancel-subscriptions/{customerId}")
-    public String cancelSubscriptions(@PathVariable String customerId) throws StripeException {
+    public String cancelSubscriptions(@PathVariable String customerId) throws StripeException, MessagingException {
+        // Retrieve customer details from Stripe
+        Customer customer = Customer.retrieve(customerId);
+        String customerEmail = customer.getEmail();
+        String customerName = customer.getName() != null ? customer.getName() : "Customer";
 
-        // List all subscriptions for the customer
+        // List all active subscriptions for the customer
         Map<String, Object> listParams = new HashMap<>();
         listParams.put("customer", customerId);
-        listParams.put("status", "active"); // Only cancel active subscriptions
+        listParams.put("status", "active");
 
         SubscriptionCollection subscriptions = Subscription.list(listParams);
 
@@ -839,16 +843,50 @@ public class StripeController {
 
         StringBuilder result = new StringBuilder("Canceled subscriptions at period end for customer " + customerId + ":\n");
 
+        // Cancel each active subscription
         for (Subscription sub : subscriptions.getData()) {
-            // Update each subscription to cancel at period end
             Map<String, Object> updateParams = new HashMap<>();
             updateParams.put("cancel_at_period_end", true);
 
             Subscription updatedSub = sub.update(updateParams);
-            result.append("Subscription ID: ").append(updatedSub.getId()).append(" will cancel at: ").append(updatedSub.getCurrentPeriodEnd()).append("\n");
+            result.append("Subscription ID: ").append(updatedSub.getId())
+                    .append(" will cancel at: ").append(updatedSub.getCurrentPeriodEnd())
+                    .append("\n");
         }
 
+        // Send email notification to the customer
+        sendCancellationEmail(customerEmail, customerName, subscriptions);
+
         return result.toString();
+    }
+
+    private void sendCancellationEmail(String toEmail, String customerName, SubscriptionCollection subscriptions) throws MessagingException {
+        MimeMessage message = mailSender.createMimeMessage();
+        MimeMessageHelper helper = new MimeMessageHelper(message, true);
+
+        helper.setFrom("contact@cltliftingclub.com");
+        helper.setTo(toEmail);
+        helper.setSubject("Membership Cancellation Confirmation");
+
+        // Build email body
+        StringBuilder emailBody = new StringBuilder();
+        emailBody.append("<h3>Dear ").append(customerName).append(",</h3>")
+                .append("<p>We have received your request to cancel your membership(s). The following subscriptions have been scheduled to cancel at the end of their current billing period:</p>")
+                .append("<ul>");
+
+        for (Subscription sub : subscriptions.getData()) {
+            emailBody.append("<li>Subscription ID: ").append(sub.getId())
+                    .append(" (Cancellation Date: ").append(new java.util.Date(sub.getCurrentPeriodEnd() * 1000))
+                    .append(")</li>");
+        }
+
+        emailBody.append("</ul>")
+                .append("<p>You will continue to have access to your membership benefits until the cancellation date(s) listed above.</p>")
+                .append("<p>If you have any questions or wish to reactivate your membership, please contact our support team.</p>")
+                .append("<p>Thank you,<br>CLT Lifting Club</p>");
+
+        helper.setText(emailBody.toString(), true); // true indicates HTML content
+        mailSender.send(message);
     }
 
     private static final String NEW_CONTACT_EMAIL = "contact@cltliftingclub.com";
