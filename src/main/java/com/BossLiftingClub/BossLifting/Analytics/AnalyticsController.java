@@ -17,6 +17,7 @@ import org.springframework.web.bind.annotation.RestController;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import jakarta.annotation.PostConstruct;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -29,6 +30,39 @@ import java.util.*;
 public class AnalyticsController {
 
     private static final Logger logger = LoggerFactory.getLogger(AnalyticsController.class);
+
+    private static final Map<String, String> MONTH_MAP = createMonthMap();
+
+    private static Map<String, String> createMonthMap() {
+        Map<String, String> map = new HashMap<>();
+        map.put("january", "01");
+        map.put("february", "02");
+        map.put("march", "03");
+        map.put("april", "04");
+        map.put("may", "05");
+        map.put("june", "06");
+        map.put("july", "07");
+        map.put("august", "08");
+        map.put("september", "09");
+        map.put("october", "10");
+        map.put("november", "11");
+        map.put("december", "12");
+        // Add abbreviations if needed
+        map.put("jan", "01");
+        map.put("feb", "02");
+        map.put("mar", "03");
+        map.put("apr", "04");
+        map.put("jun", "06");
+        map.put("jul", "07");
+        map.put("aug", "08");
+        map.put("sep", "09");
+        map.put("oct", "10");
+        map.put("nov", "11");
+        map.put("dec", "12");
+        return Collections.unmodifiableMap(map);
+    }
+
+
 
     @Autowired
     private final UserRepository userRepository;
@@ -45,6 +79,7 @@ public class AnalyticsController {
         this.objectMapper = objectMapper;
     }
 
+
     @GetMapping
     @Transactional
     public AnalyticsResponse getAnalytics(
@@ -57,9 +92,23 @@ public class AnalyticsController {
                 throw new IllegalArgumentException("Invalid userType: " + userType);
             }
 
-            String effectiveMonth = month != null ? month : LocalDate.now().format(DateTimeFormatter.ofPattern("yyyy-MM"));
+            // Standardize month to yyyy-MM format
+            String standardizedMonth;
+            if (month == null) {
+                standardizedMonth = LocalDate.now().format(DateTimeFormatter.ofPattern("yyyy-MM"));
+            } else if (month.matches("\\d{4}-\\d{2}")) {
+                standardizedMonth = month;
+            } else {
+                String lowerMonth = month.toLowerCase();
+                if (MONTH_MAP.containsKey(lowerMonth)) {
+                    int year = LocalDate.now().getYear();
+                    standardizedMonth = year + "-" + MONTH_MAP.get(lowerMonth);
+                } else {
+                    throw new IllegalArgumentException("Invalid month format: " + month + ". Use yyyy-MM or full month name.");
+                }
+            }
 
-            String cacheKey = String.format("%s_%s_%s", userType, effectiveMonth, includeMaintenance);
+            String cacheKey = String.format("%s_%s_%s", userType, standardizedMonth, includeMaintenance);
 
             // Check cache first
             Optional<AnalyticsCache> cacheOptional = analyticsCacheRepository.findById(cacheKey);
@@ -72,7 +121,7 @@ public class AnalyticsController {
             }
 
             // Calculate live data if cache is empty or stale
-            AnalyticsResponse response = calculateAnalytics(userType, month, includeMaintenance);
+            AnalyticsResponse response = calculateAnalytics(userType, standardizedMonth, includeMaintenance);
 
             // Save or update cache
             AnalyticsCache cache = cacheOptional.orElse(new AnalyticsCache());
