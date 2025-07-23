@@ -1,5 +1,6 @@
 package com.BossLiftingClub.BossLifting.Analytics;
 
+import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Id;
 import java.time.LocalDateTime;
@@ -9,6 +10,7 @@ public class AnalyticsCache {
 
     @Id
     private String cacheKey; // Changed from userType to cacheKey to match the composite key
+    @Column(columnDefinition = "TEXT")
     private String analyticsData;
     private LocalDateTime lastUpdated;
 
