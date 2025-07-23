@@ -21,18 +21,14 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Optional;
+import java.time.format.DateTimeFormatter;
+import java.util.*;
 
 @RestController
 @RequestMapping("/api/analytics")
 public class AnalyticsController {
 
     private static final Logger logger = LoggerFactory.getLogger(AnalyticsController.class);
-
 
     @Autowired
     private final UserRepository userRepository;
@@ -49,40 +45,46 @@ public class AnalyticsController {
         this.objectMapper = objectMapper;
     }
 
-
     @GetMapping
     @Transactional
-    public AnalyticsResponse getAnalytics(@RequestParam String userType) {
+    public AnalyticsResponse getAnalytics(
+            @RequestParam String userType,
+            @RequestParam(required = false) String month,
+            @RequestParam(defaultValue = "false") boolean includeMaintenance) {
         try {
             // Validate userType
-            if (!userType.equals("all") && !userType.equals("founder") && !userType.equals("monthly") && !userType.equals("annual") && !userType.equals("misc")) {
+            if (!userType.equals("all") && !userType.equals("founder") && !userType.equals("monthly") && !userType.equals("annual") && !userType.equals("misc") && !userType.equals("maintenance")) {
                 throw new IllegalArgumentException("Invalid userType: " + userType);
             }
 
+            String effectiveMonth = month != null ? month : LocalDate.now().format(DateTimeFormatter.ofPattern("yyyy-MM"));
+
+            String cacheKey = String.format("%s_%s_%s", userType, effectiveMonth, includeMaintenance);
+
             // Check cache first
-            Optional<AnalyticsCache> cacheOptional = analyticsCacheRepository.findById(userType);
+            Optional<AnalyticsCache> cacheOptional = analyticsCacheRepository.findById(cacheKey);
             if (cacheOptional.isPresent()) {
                 AnalyticsCache cache = cacheOptional.get();
                 if (cache.getLastUpdated() != null && cache.getLastUpdated().isAfter(LocalDateTime.now().minusHours(12))) {
-                    logger.info("Serving cached analytics data for userType={}", userType);
+                    logger.info("Serving cached analytics data for key={}", cacheKey);
                     return objectMapper.readValue(cache.getAnalyticsData(), AnalyticsResponse.class);
                 }
             }
 
             // Calculate live data if cache is empty or stale
-            AnalyticsResponse response = calculateAnalytics(userType);
+            AnalyticsResponse response = calculateAnalytics(userType, month, includeMaintenance);
 
             // Save or update cache
             AnalyticsCache cache = cacheOptional.orElse(new AnalyticsCache());
-            cache.setUserType(userType);
+            cache.setCacheKey(cacheKey);
             cache.setAnalyticsData(objectMapper.writeValueAsString(response));
             cache.setLastUpdated(LocalDateTime.now());
             analyticsCacheRepository.save(cache);
 
-            logger.info("Calculated and cached analytics data for userType={}", userType);
+            logger.info("Calculated and cached analytics data for key={}", cacheKey);
             return response;
         } catch (Exception e) {
-            logger.error("Unexpected error in getAnalytics for userType={}: {}", userType, e.getMessage(), e);
+            logger.error("Unexpected error in getAnalytics for userType={}, month={}, includeMaintenance={}: {}", userType, month, includeMaintenance, e.getMessage(), e);
             throw new RuntimeException("Error fetching analytics data: " + e.getMessage());
         }
     }
@@ -92,16 +94,20 @@ public class AnalyticsController {
     public void updateAnalyticsCache() {
         try {
             logger.info("Starting scheduled analytics cache update");
-            String[] userTypes = {"all", "founder", "monthly", "annual", "misc"};
+            String[] userTypes = {"all", "founder", "monthly", "annual", "misc", "maintenance"};
+            boolean[] includes = {true, false};
             for (String userType : userTypes) {
-                AnalyticsResponse response = calculateAnalytics(userType);
-                Optional<AnalyticsCache> cacheOptional = analyticsCacheRepository.findById(userType);
-                AnalyticsCache cache = cacheOptional.orElse(new AnalyticsCache());
-                cache.setUserType(userType);
-                cache.setAnalyticsData(objectMapper.writeValueAsString(response));
-                cache.setLastUpdated(LocalDateTime.now());
-                analyticsCacheRepository.save(cache);
-                logger.info("Cached analytics data for userType={}", userType);
+                for (boolean include : includes) {
+                    String cacheKey = String.format("%s_current_%s", userType, include);
+                    AnalyticsResponse response = calculateAnalytics(userType, null, include);
+                    Optional<AnalyticsCache> cacheOptional = analyticsCacheRepository.findById(cacheKey);
+                    AnalyticsCache cache = cacheOptional.orElse(new AnalyticsCache());
+                    cache.setCacheKey(cacheKey);
+                    cache.setAnalyticsData(objectMapper.writeValueAsString(response));
+                    cache.setLastUpdated(LocalDateTime.now());
+                    analyticsCacheRepository.save(cache);
+                    logger.info("Cached analytics data for key={}", cacheKey);
+                }
             }
             logger.info("Completed scheduled analytics cache update");
         } catch (Exception e) {
@@ -109,14 +115,18 @@ public class AnalyticsController {
         }
     }
 
-    private AnalyticsResponse calculateAnalytics(String userType) {
+    private AnalyticsResponse calculateAnalytics(String userType, String month, boolean includeMaintenance) {
         try {
             // Define Price IDs for categorization
             Map<String, String> priceIds = new HashMap<>();
             priceIds.put("founder", "price_1R6aIfGHcVHSTvgIlwN3wmyD");
             priceIds.put("monthly", "price_1RF313GHcVHSTvgI4HXgjwOA");
             priceIds.put("annual", "price_1RJJuTGHcVHSTvgI2pVN6hfx");
-            String ignoredPriceId = "price_1RF30SGHcVHSTvgIpegCzQ0m";
+            priceIds.put("maintenance", "price_1RF30SGHcVHSTvgIpegCzQ0m");
+
+            String maintenanceId = priceIds.get("maintenance");
+
+            boolean skipMaintenance = !includeMaintenance && !userType.equals("maintenance");
 
             // Fetch all users from UserRepository
             List<User> users;
@@ -128,55 +138,42 @@ public class AnalyticsController {
                 throw new RuntimeException("Failed to fetch users: " + e.getMessage());
             }
 
-            List<Subscription> relevantSubscriptions = new ArrayList<>();
+            Set<String> ourCustomers = new HashSet<>();
+            for (User user : users) {
+                if (user.getUserStripeMemberId() != null) {
+                    ourCustomers.add(user.getUserStripeMemberId());
+                }
+            }
 
-            // Define time periods
-            LocalDateTime now = LocalDateTime.now();
-            LocalDate startOfThisMonth = now.toLocalDate().withDayOfMonth(1);
-            LocalDate endOfThisMonth = startOfThisMonth.plusMonths(1).minusDays(1);
-            LocalDate startOfLastMonth = startOfThisMonth.minusMonths(1);
-            LocalDate endOfLastMonth = startOfLastMonth.plusMonths(1).minusDays(1);
-            long thisMonthStartEpoch = startOfThisMonth.atStartOfDay(ZoneId.systemDefault()).toEpochSecond();
-            long currentDateEpoch = now.atZone(ZoneId.systemDefault()).toEpochSecond();
-            long thisMonthEndEpoch = endOfThisMonth.atTime(23, 59, 59).atZone(ZoneId.systemDefault()).toEpochSecond();
-            long lastMonthStartEpoch = startOfLastMonth.atStartOfDay(ZoneId.systemDefault()).toEpochSecond();
-            long lastMonthEndEpoch = endOfLastMonth.atTime(23, 59, 59).atZone(ZoneId.systemDefault()).toEpochSecond();
+            // Fetch all paid invoices once
+            InvoiceListParams allInvoicesParams = InvoiceListParams.builder()
+                    .setStatus(InvoiceListParams.Status.PAID)
+                    .build();
+            List<Invoice> allPaidInvoices = new ArrayList<>();
+            for (Invoice invoice : Invoice.list(allInvoicesParams).autoPagingIterable()) {
+                if (ourCustomers.contains(invoice.getCustomer())) {
+                    allPaidInvoices.add(invoice);
+                }
+            }
 
             // Fetch all subscriptions for each user
+            List<Subscription> allSubscriptions = new ArrayList<>();
             for (User user : users) {
-                if (user.getUserStripeMemberId() == null) {
+                String customerId = user.getUserStripeMemberId();
+                if (customerId == null) {
                     logger.warn("Skipping user with ID {}: stripeCustomerId is null", user.getId());
                     continue;
                 }
 
                 try {
                     SubscriptionListParams params = SubscriptionListParams.builder()
-                            .setCustomer(user.getUserStripeMemberId())
+                            .setCustomer(customerId)
+                            .setStatus(SubscriptionListParams.Status.ALL)
                             .build();
 
                     SubscriptionCollection subscriptions = Subscription.list(params);
                     for (Subscription sub : subscriptions.autoPagingIterable()) {
-                        try {
-                            boolean isRelevant = false;
-                            SubscriptionItemCollection items = sub.getItems();
-                            for (SubscriptionItem item : items.getData()) {
-                                String priceId = item.getPrice() != null ? item.getPrice().getId() : null;
-                                if (priceId == null) {
-                                    logger.warn("Skipping subscription item with null price for subscription {} and user {}", sub.getId(), user.getId());
-                                    continue;
-                                }
-                                if (!priceId.equals(ignoredPriceId)) {
-                                    isRelevant = true;
-                                    break;
-                                }
-                            }
-                            if (isRelevant) {
-                                relevantSubscriptions.add(sub);
-                            }
-                        } catch (Exception e) {
-                            logger.error("Error processing subscription {} for user {}: {}", sub.getId(), user.getId(), e.getMessage());
-                            continue;
-                        }
+                        allSubscriptions.add(sub);
                     }
                 } catch (Exception e) {
                     logger.error("Error fetching subscriptions for user {}: {}", user.getId(), e.getMessage());
@@ -184,281 +181,253 @@ public class AnalyticsController {
                 }
             }
 
-            // Filter subscriptions by user type
+            // Filter relevant subscriptions based on type and maintenance flag
             List<Subscription> filteredSubscriptions = new ArrayList<>();
-            if (!userType.equals("all")) {
-                String targetPriceId = priceIds.get(userType);
-                for (Subscription sub : relevantSubscriptions) {
-                    try {
-                        for (SubscriptionItem item : sub.getItems().getData()) {
-                            String priceId = item.getPrice() != null ? item.getPrice().getId() : null;
-                            if (priceId == null) continue;
-                            if (userType.equals("misc")) {
-                                if (!priceIds.containsValue(priceId) && !priceId.equals(ignoredPriceId)) {
-                                    filteredSubscriptions.add(sub);
-                                    break;
-                                }
-                            } else if (priceId.equals(targetPriceId)) {
-                                filteredSubscriptions.add(sub);
-                                break;
-                            }
-                        }
-                    } catch (Exception e) {
-                        logger.error("Error filtering subscription {}: {}", sub.getId(), e.getMessage());
-                        continue;
+            for (Subscription sub : allSubscriptions) {
+                boolean isRelevant = false;
+                for (SubscriptionItem item : sub.getItems().getData()) {
+                    String priceId = item.getPrice() != null ? item.getPrice().getId() : null;
+                    if (priceId == null) continue;
+                    if (skipMaintenance && priceId.equals(maintenanceId)) continue;
+                    String subType = getTypeFromPriceId(priceIds, priceId);
+                    if (matchesUserType(userType, subType)) {
+                        isRelevant = true;
+                        break;
                     }
                 }
-            } else {
-                filteredSubscriptions.addAll(relevantSubscriptions);
+                if (isRelevant) {
+                    filteredSubscriptions.add(sub);
+                }
             }
 
-            // Calculate analytics metrics
-            double actualRevenueThisMonth = 0;
-            double projectedRevenueRestOfMonth = 0;
-            double totalRevenueLastMonth = 0;
-            int userCount = 0;
+            // Determine selected month
+            LocalDate nowDate = LocalDate.now();
+            LocalDate selectedMonthDate = month != null ? LocalDate.parse(month + "-01") : nowDate.withDayOfMonth(1);
+            boolean isCurrentMonth = selectedMonthDate.equals(nowDate.withDayOfMonth(1));
+            long currentEpoch = System.currentTimeMillis() / 1000;
+
+            LocalDate startOfSelectedMonth = selectedMonthDate.withDayOfMonth(1);
+            LocalDate endOfSelectedMonth = startOfSelectedMonth.plusMonths(1).minusDays(1);
+            long startSelectedEpoch = startOfSelectedMonth.atStartOfDay(ZoneId.systemDefault()).toEpochSecond();
+            long endSelectedEpoch = endOfSelectedMonth.atTime(23, 59, 59).atZone(ZoneId.systemDefault()).toEpochSecond();
+
+            LocalDate startOfPreviousMonth = startOfSelectedMonth.minusMonths(1);
+            LocalDate endOfPreviousMonth = startOfPreviousMonth.plusMonths(1).minusDays(1);
+            long startPreviousEpoch = startOfPreviousMonth.atStartOfDay(ZoneId.systemDefault()).toEpochSecond();
+            long endPreviousEpoch = endOfPreviousMonth.atTime(23, 59, 59).atZone(ZoneId.systemDefault()).toEpochSecond();
+
+            // Calculate lifetime revenue and customers per type
+            Map<String, Double> lifetimeRevenuePerType = new HashMap<>();
+            Map<String, Set<String>> customersPerType = new HashMap<>();
+            Set<String> allPayingCustomers = new HashSet<>();
+            for (Invoice invoice : allPaidInvoices) {
+                String customer = invoice.getCustomer();
+                for (InvoiceLineItem line : invoice.getLines().getData()) {
+                    String priceId = line.getPrice() != null ? line.getPrice().getId() : null;
+                    if (priceId == null) continue;
+                    if (skipMaintenance && priceId.equals(maintenanceId)) continue;
+                    String subType = getTypeFromPriceId(priceIds, priceId);
+                    if (!matchesUserType(userType, subType)) continue;
+                    double amount = line.getAmount() / 100.0;
+                    lifetimeRevenuePerType.put(subType, lifetimeRevenuePerType.getOrDefault(subType, 0.0) + amount);
+                    Set<String> customers = customersPerType.computeIfAbsent(subType, k -> new HashSet<>());
+                    customers.add(customer);
+                    allPayingCustomers.add(customer);
+                }
+            }
+
+            double totalLifetimeRevenue = lifetimeRevenuePerType.values().stream().mapToDouble(Double::doubleValue).sum();
+            double averageLTV = allPayingCustomers.size() > 0 ? totalLifetimeRevenue / allPayingCustomers.size() : 0;
+
+            // Prepare userTypeBreakdown
             Map<String, UserTypeData> userTypeBreakdown = new HashMap<>();
-            Map<String, Double> weeklyRevenueThisMonthActual = new HashMap<>();
-            Map<String, Double> weeklyRevenueThisMonthProjected = new HashMap<>();
-            Map<String, Double> weeklyRevenueLastMonth = new HashMap<>();
-            Map<String, Integer> userTypeCounts = new HashMap<>();
-            String[] weeks = {"Week 1", "Week 2", "Week 3", "Week 4"};
-
-            // Initialize weekly data
-            for (String week : weeks) {
-                weeklyRevenueThisMonthActual.put(week, 0.0);
-                weeklyRevenueThisMonthProjected.put(week, 0.0);
-                weeklyRevenueLastMonth.put(week, 0.0);
+            for (Map.Entry<String, Double> entry : lifetimeRevenuePerType.entrySet()) {
+                String type = entry.getKey();
+                UserTypeData data = new UserTypeData();
+                data.setRevenue(entry.getValue());
+                Set<String> customers = customersPerType.getOrDefault(type, new HashSet<>());
+                data.setLtv(customers.size() > 0 ? entry.getValue() / customers.size() : 0);
+                userTypeBreakdown.put(type, data);
             }
 
-            // Calculate lifetime revenue for userTypeBreakdown
-            for (User user : users) {
-                if (user.getUserStripeMemberId() == null) continue;
+            // Calculate actual revenue for selected month
+            double actualRevenueSelected = calculateRevenueForPeriod(allPaidInvoices, startSelectedEpoch, endSelectedEpoch, userType, priceIds, skipMaintenance, maintenanceId);
 
-                try {
-                    InvoiceListParams invoiceParams = InvoiceListParams.builder()
-                            .setCustomer(user.getUserStripeMemberId())
-                            .setStatus(InvoiceListParams.Status.PAID)
-                            .build();
+            // Calculate actual revenue for previous month
+            double actualRevenuePrevious = calculateRevenueForPeriod(allPaidInvoices, startPreviousEpoch, endPreviousEpoch, userType, priceIds, skipMaintenance, maintenanceId);
 
-                    for (Invoice invoice : Invoice.list(invoiceParams).autoPagingIterable()) {
-                        try {
-                            for (com.stripe.model.InvoiceLineItem line : invoice.getLines().getData()) {
-                                String priceId = line.getPrice() != null ? line.getPrice().getId() : null;
-                                if (priceId == null || priceId.equals(ignoredPriceId)) continue;
-
-                                String subscriptionType = priceIds.entrySet().stream()
-                                        .filter(entry -> entry.getValue().equals(priceId))
-                                        .map(Map.Entry::getKey)
-                                        .findFirst()
-                                        .orElse("misc");
-
-                                if (!userType.equals("all") && !userType.equals(subscriptionType) && !(userType.equals("misc") && !priceIds.containsValue(priceId))) {
-                                    continue;
-                                }
-
-                                double amountInDollars = line.getAmount() / 100.0;
-                                UserTypeData typeData = userTypeBreakdown.getOrDefault(subscriptionType, new UserTypeData());
-                                typeData.revenue += amountInDollars;
-                                userTypeBreakdown.put(subscriptionType, typeData);
-                            }
-                        } catch (Exception e) {
-                            logger.error("Error processing invoice {} for user {}: {}", invoice.getId(), user.getId(), e.getMessage());
-                            continue;
-                        }
-                    }
-                } catch (Exception e) {
-                    logger.error("Error fetching lifetime invoices for user {}: {}", user.getId(), e.getMessage());
-                    continue;
-                }
+            // Calculate projected revenue (only for current month)
+            double projectedRevenue = 0;
+            if (isCurrentMonth) {
+                projectedRevenue = calculateProjectedRevenue(filteredSubscriptions, currentEpoch, endSelectedEpoch, priceIds, userType, skipMaintenance, maintenanceId);
             }
 
-            // Calculate actual revenue this month (invoices paid from start of month to current date)
-            for (User user : users) {
-                if (user.getUserStripeMemberId() == null) continue;
-
-                try {
-                    InvoiceListParams invoiceParams = InvoiceListParams.builder()
-                            .setCustomer(user.getUserStripeMemberId())
-                            .setStatus(InvoiceListParams.Status.PAID)
-                            .setCreated(InvoiceListParams.Created.builder()
-                                    .setGte(thisMonthStartEpoch)
-                                    .setLte(currentDateEpoch)
-                                    .build())
-                            .build();
-
-                    for (Invoice invoice : Invoice.list(invoiceParams).autoPagingIterable()) {
-                        try {
-                            for (com.stripe.model.InvoiceLineItem line : invoice.getLines().getData()) {
-                                String priceId = line.getPrice() != null ? line.getPrice().getId() : null;
-                                if (priceId == null || priceId.equals(ignoredPriceId)) continue;
-
-                                String subscriptionType = priceIds.entrySet().stream()
-                                        .filter(entry -> entry.getValue().equals(priceId))
-                                        .map(Map.Entry::getKey)
-                                        .findFirst()
-                                        .orElse("misc");
-
-                                if (!userType.equals("all") && !userType.equals(subscriptionType) && !(userType.equals("misc") && !priceIds.containsValue(priceId))) {
-                                    continue;
-                                }
-
-                                double amountInDollars = line.getAmount() / 100.0;
-                                actualRevenueThisMonth += amountInDollars;
-
-                                long created = invoice.getCreated();
-                                long daysInMonth = (created - thisMonthStartEpoch) / (24 * 3600);
-                                int weekIndex = Math.min(Math.max((int) (daysInMonth / 7), 0), 3);
-                                weeklyRevenueThisMonthActual.put(weeks[weekIndex], weeklyRevenueThisMonthActual.get(weeks[weekIndex]) + amountInDollars);
-                            }
-                        } catch (Exception e) {
-                            logger.error("Error processing invoice {} for user {}: {}", invoice.getId(), user.getId(), e.getMessage());
-                            continue;
-                        }
-                    }
-                } catch (Exception e) {
-                    logger.error("Error fetching invoices for user {}: {}", user.getId(), e.getMessage());
-                    continue;
-                }
+            // Calculate historical monthly data (last 6 months including selected)
+            final int numHistoricalMonths = 6;
+            String[] historicalLabels = new String[numHistoricalMonths];
+            Double[] historicalActual = new Double[numHistoricalMonths];
+            Double[] historicalProjected = new Double[numHistoricalMonths];
+            LocalDate histMonth = selectedMonthDate.minusMonths(numHistoricalMonths - 1);
+            for (int i = 0; i < numHistoricalMonths; i++) {
+                LocalDate mStart = histMonth.withDayOfMonth(1);
+                LocalDate mEnd = histMonth.plusMonths(1).minusDays(1);
+                long mStartEpoch = mStart.atStartOfDay(ZoneId.systemDefault()).toEpochSecond();
+                long mEndEpoch = mEnd.atTime(23, 59, 59).atZone(ZoneId.systemDefault()).toEpochSecond();
+                double rev = calculateRevenueForPeriod(allPaidInvoices, mStartEpoch, mEndEpoch, userType, priceIds, skipMaintenance, maintenanceId);
+                historicalLabels[i] = histMonth.format(DateTimeFormatter.ofPattern("MMM yyyy"));
+                historicalActual[i] = rev;
+                historicalProjected[i] = 0.0;
+                histMonth = histMonth.plusMonths(1);
+            }
+            if (isCurrentMonth) {
+                historicalProjected[numHistoricalMonths - 1] = projectedRevenue;
             }
 
-            // Calculate last month's revenue (invoices paid last month)
-            for (User user : users) {
-                if (user.getUserStripeMemberId() == null) continue;
-
-                try {
-                    InvoiceListParams invoiceParams = InvoiceListParams.builder()
-                            .setCustomer(user.getUserStripeMemberId())
-                            .setStatus(InvoiceListParams.Status.PAID)
-                            .setCreated(InvoiceListParams.Created.builder()
-                                    .setGte(lastMonthStartEpoch)
-                                    .setLte(lastMonthEndEpoch)
-                                    .build())
-                            .build();
-
-                    for (Invoice invoice : Invoice.list(invoiceParams).autoPagingIterable()) {
-                        try {
-                            for (com.stripe.model.InvoiceLineItem line : invoice.getLines().getData()) {
-                                String priceId = line.getPrice() != null ? line.getPrice().getId() : null;
-                                if (priceId == null || priceId.equals(ignoredPriceId)) continue;
-
-                                String subscriptionType = priceIds.entrySet().stream()
-                                        .filter(entry -> entry.getValue().equals(priceId))
-                                        .map(Map.Entry::getKey)
-                                        .findFirst()
-                                        .orElse("misc");
-
-                                if (!userType.equals("all") && !userType.equals(subscriptionType) && !(userType.equals("misc") && !priceIds.containsValue(priceId))) {
-                                    continue;
-                                }
-
-                                double amountInDollars = line.getAmount() / 100.0;
-                                totalRevenueLastMonth += amountInDollars;
-
-                                long created = invoice.getCreated();
-                                long daysInMonth = (created - lastMonthStartEpoch) / (24 * 3600);
-                                int weekIndex = Math.min(Math.max((int) (daysInMonth / 7), 0), 3);
-                                weeklyRevenueLastMonth.put(weeks[weekIndex], weeklyRevenueLastMonth.get(weeks[weekIndex]) + amountInDollars);
-                            }
-                        } catch (Exception e) {
-                            logger.error("Error processing invoice {} for user {}: {}", invoice.getId(), user.getId(), e.getMessage());
-                            continue;
-                        }
-                    }
-                } catch (Exception e) {
-                    logger.error("Error fetching invoices for user {}: {}", user.getId(), e.getMessage());
-                    continue;
-                }
-            }
-
-            // Calculate projected revenue for rest of month (upcoming renewals)
+            // Calculate churn, new subs, active count, MRR for selected month
+            int activeAtStart = 0;
+            int numberCanceled = 0;
+            int newSubscriptions = 0;
+            int userCount = 0; // Active at end of month
+            double mrr = 0.0;
             for (Subscription sub : filteredSubscriptions) {
-                try {
-                    if (!sub.getStatus().equals("active")) continue;
-
+                // Active at start
+                if (sub.getStartDate() <= startSelectedEpoch && (sub.getCanceledAt() == null || sub.getCanceledAt() > startSelectedEpoch)) {
+                    activeAtStart++;
+                }
+                // Canceled in month
+                if (sub.getCanceledAt() != null && sub.getCanceledAt() >= startSelectedEpoch && sub.getCanceledAt() <= endSelectedEpoch) {
+                    numberCanceled++;
+                }
+                // New in month
+                if (sub.getStartDate() >= startSelectedEpoch && sub.getStartDate() <= endSelectedEpoch) {
+                    newSubscriptions++;
+                }
+                // Active at end
+                if (sub.getStartDate() <= endSelectedEpoch && (sub.getCanceledAt() == null || sub.getCanceledAt() > endSelectedEpoch)) {
+                    userCount++;
+                    // Calculate MRR contribution
                     for (SubscriptionItem item : sub.getItems().getData()) {
                         String priceId = item.getPrice() != null ? item.getPrice().getId() : null;
-                        if (priceId == null || priceId.equals(ignoredPriceId)) continue;
-
-                        String subscriptionType = priceIds.entrySet().stream()
-                                .filter(entry -> entry.getValue().equals(priceId))
-                                .map(Map.Entry::getKey)
-                                .findFirst()
-                                .orElse("misc");
-
-                        if (!userType.equals("all") && !userType.equals(subscriptionType) && !(userType.equals("misc") && !priceIds.containsValue(priceId))) {
-                            continue;
-                        }
-
-                        userTypeCounts.compute(subscriptionType, (k, v) -> (v == null) ? 1 : v + 1);
-
+                        if (priceId == null) continue;
+                        if (skipMaintenance && priceId.equals(maintenanceId)) continue;
+                        String subType = getTypeFromPriceId(priceIds, priceId);
+                        if (!matchesUserType(userType, subType)) continue;
                         long unitAmount = item.getPrice().getUnitAmount();
-                        double amountInDollars = unitAmount / 100.0;
-
-                        if (sub.getCurrentPeriodEnd() > currentDateEpoch && sub.getCurrentPeriodEnd() <= thisMonthEndEpoch) {
-                            projectedRevenueRestOfMonth += amountInDollars;
-
-                            long periodEnd = sub.getCurrentPeriodEnd();
-                            long daysInMonth = (periodEnd - thisMonthStartEpoch) / (24 * 3600);
-                            int weekIndex = Math.min(Math.max((int) (daysInMonth / 7), 0), 3);
-                            weeklyRevenueThisMonthProjected.put(weeks[weekIndex], weeklyRevenueThisMonthProjected.get(weeks[weekIndex]) + amountInDollars);
-                        }
+                        String interval = item.getPrice().getRecurring() != null ? item.getPrice().getRecurring().getInterval() : "month";
+                        double monthlyAmount = (unitAmount / 100.0) / (interval.equals("year") ? 12 : 1);
+                        mrr += monthlyAmount;
                     }
-                    userCount++;
-                } catch (Exception e) {
-                    logger.error("Error processing subscription {}: {}", sub.getId(), e.getMessage());
-                    continue;
                 }
             }
+            double churnRate = activeAtStart > 0 ? (numberCanceled / (double) activeAtStart) * 100 : 0;
 
-            // Set user type counts
-            userTypeBreakdown.forEach((type, data) -> data.setCount(userTypeCounts.getOrDefault(type, 0)));
-
-            // Calculate total revenue for this month (actual only)
-            double totalRevenueThisMonth = actualRevenueThisMonth;
-
-            // Calculate combined total for display
-            double combinedTotal = actualRevenueThisMonth + projectedRevenueRestOfMonth;
-
-            // Prepare chart data
-            Double[] weeklyRevenueThisMonthActualArray = new Double[4];
-            Double[] weeklyRevenueThisMonthProjectedArray = new Double[4];
-            for (int i = 0; i < 4; i++) {
-                weeklyRevenueThisMonthActualArray[i] = weeklyRevenueThisMonthActual.get(weeks[i]);
-                weeklyRevenueThisMonthProjectedArray[i] = weeklyRevenueThisMonthProjected.get(weeks[i]);
+            // Set counts in userTypeBreakdown (current active per type)
+            Map<String, Integer> activeCountsPerType = new HashMap<>();
+            for (Subscription sub : filteredSubscriptions) {
+                if (sub.getStartDate() <= endSelectedEpoch && (sub.getCanceledAt() == null || sub.getCanceledAt() > endSelectedEpoch)) {
+                    for (SubscriptionItem item : sub.getItems().getData()) {
+                        String priceId = item.getPrice() != null ? item.getPrice().getId() : null;
+                        if (priceId == null) continue;
+                        if (skipMaintenance && priceId.equals(maintenanceId)) continue;
+                        String subType = getTypeFromPriceId(priceIds, priceId);
+                        if (matchesUserType(userType, subType)) {
+                            activeCountsPerType.put(subType, activeCountsPerType.getOrDefault(subType, 0) + 1);
+                            break; // Assume one type per sub
+                        }
+                    }
+                }
+            }
+            for (Map.Entry<String, UserTypeData> entry : userTypeBreakdown.entrySet()) {
+                entry.getValue().setCount(activeCountsPerType.getOrDefault(entry.getKey(), 0));
             }
 
-            // Calculate metrics
-            double percentageChange = totalRevenueLastMonth > 0 ?
-                    ((totalRevenueThisMonth - totalRevenueLastMonth) / totalRevenueLastMonth) * 100 : 0;
+            // Calculate percentage change based on actual
+            double percentageChange = actualRevenuePrevious > 0 ?
+                    ((actualRevenueSelected - actualRevenuePrevious) / actualRevenuePrevious) * 100 : 0;
+
+            double combinedTotal = actualRevenueSelected + projectedRevenue;
 
             // Prepare response
             AnalyticsResponse response = new AnalyticsResponse();
-            response.setTotalRevenue(totalRevenueThisMonth);
+            response.setTotalRevenue(actualRevenueSelected);
             response.setUserCount(userCount);
-            response.setProjectedRevenue(projectedRevenueRestOfMonth);
+            response.setProjectedRevenue(projectedRevenue);
             response.setMonthlyComparison(new MonthlyComparison(
-                    totalRevenueThisMonth,
-                    totalRevenueLastMonth,
+                    actualRevenueSelected,
+                    actualRevenuePrevious,
                     percentageChange,
                     combinedTotal
             ));
             response.setChartData(new ChartData(
-                    weeks,
-                    weeklyRevenueThisMonthActualArray,
-                    weeklyRevenueThisMonthProjectedArray,
-                    weeklyRevenueLastMonth.values().toArray(new Double[0])
+                    historicalLabels,
+                    historicalActual,
+                    historicalProjected
             ));
             response.setUserTypeBreakdown(userTypeBreakdown);
+            response.setChurnCount(numberCanceled);
+            response.setChurnRate(churnRate);
+            response.setNewSubscriptions(newSubscriptions);
+            response.setMrr(mrr);
+            response.setTotalLifetimeRevenue(totalLifetimeRevenue);
+            response.setAverageLTV(averageLTV);
 
-            logger.info("Analytics processed successfully for userType={}: actualRevenueThisMonth={}, projectedRevenueRestOfMonth={}, totalRevenueThisMonth={}, combinedTotal={}, lastMonthRevenue={}, userCount={}",
-                    userType, actualRevenueThisMonth, projectedRevenueRestOfMonth, totalRevenueThisMonth, combinedTotal, totalRevenueLastMonth, userCount);
+            logger.info("Analytics processed successfully for userType={}, month={}, includeMaintenance={}", userType, month, includeMaintenance);
 
             return response;
         } catch (Exception e) {
-            logger.error("Error in calculateAnalytics for userType={}: {}", userType, e.getMessage(), e);
+            logger.error("Error in calculateAnalytics for userType={}, month={}, includeMaintenance={}: {}", userType, month, includeMaintenance, e.getMessage(), e);
             throw new RuntimeException("Error calculating analytics data: " + e.getMessage());
         }
+    }
+
+    private String getTypeFromPriceId(Map<String, String> priceIds, String priceId) {
+        for (Map.Entry<String, String> entry : priceIds.entrySet()) {
+            if (entry.getValue().equals(priceId)) {
+                return entry.getKey();
+            }
+        }
+        return "misc";
+    }
+
+    private boolean matchesUserType(String userType, String subType) {
+        return userType.equals("all") || userType.equals(subType) || (userType.equals("misc") && subType.equals("misc"));
+    }
+
+    private double calculateRevenueForPeriod(List<Invoice> allPaidInvoices, long startEpoch, long endEpoch, String userType, Map<String, String> priceIds, boolean skipMaintenance, String maintenanceId) {
+        double revenue = 0;
+        for (Invoice invoice : allPaidInvoices) {
+            if (invoice.getCreated() < startEpoch || invoice.getCreated() > endEpoch) continue;
+            for (InvoiceLineItem line : invoice.getLines().getData()) {
+                String priceId = line.getPrice() != null ? line.getPrice().getId() : null;
+                if (priceId == null) continue;
+                if (skipMaintenance && priceId.equals(maintenanceId)) continue;
+                String subType = getTypeFromPriceId(priceIds, priceId);
+                if (matchesUserType(userType, subType)) {
+                    revenue += line.getAmount() / 100.0;
+                }
+            }
+        }
+        return revenue;
+    }
+
+    private double calculateProjectedRevenue(List<Subscription> filteredSubscriptions, long currentEpoch, long endEpoch, Map<String, String> priceIds, String userType, boolean skipMaintenance, String maintenanceId) {
+        double projected = 0;
+        for (Subscription sub : filteredSubscriptions) {
+            if (!sub.getStatus().equals("active")) continue;
+            for (SubscriptionItem item : sub.getItems().getData()) {
+                String priceId = item.getPrice() != null ? item.getPrice().getId() : null;
+                if (priceId == null) continue;
+                if (skipMaintenance && priceId.equals(maintenanceId)) continue;
+                String subType = getTypeFromPriceId(priceIds, priceId);
+                if (!matchesUserType(userType, subType)) continue;
+                long unitAmount = item.getPrice().getUnitAmount();
+                double amount = unitAmount / 100.0;
+                if (sub.getCurrentPeriodEnd() > currentEpoch && sub.getCurrentPeriodEnd() <= endEpoch) {
+                    projected += amount;
+                }
+            }
+        }
+        return projected;
     }
 
     // DTO classes
@@ -469,7 +438,14 @@ public class AnalyticsController {
         private MonthlyComparison monthlyComparison;
         private ChartData chartData;
         private Map<String, UserTypeData> userTypeBreakdown;
+        private int churnCount;
+        private double churnRate;
+        private int newSubscriptions;
+        private double mrr;
+        private double totalLifetimeRevenue;
+        private double averageLTV;
 
+        // Getters and Setters
         public double getTotalRevenue() { return totalRevenue; }
         public void setTotalRevenue(double totalRevenue) { this.totalRevenue = totalRevenue; }
         public int getUserCount() { return userCount; }
@@ -482,6 +458,18 @@ public class AnalyticsController {
         public void setChartData(ChartData chartData) { this.chartData = chartData; }
         public Map<String, UserTypeData> getUserTypeBreakdown() { return userTypeBreakdown; }
         public void setUserTypeBreakdown(Map<String, UserTypeData> userTypeBreakdown) { this.userTypeBreakdown = userTypeBreakdown; }
+        public int getChurnCount() { return churnCount; }
+        public void setChurnCount(int churnCount) { this.churnCount = churnCount; }
+        public double getChurnRate() { return churnRate; }
+        public void setChurnRate(double churnRate) { this.churnRate = churnRate; }
+        public int getNewSubscriptions() { return newSubscriptions; }
+        public void setNewSubscriptions(int newSubscriptions) { this.newSubscriptions = newSubscriptions; }
+        public double getMrr() { return mrr; }
+        public void setMrr(double mrr) { this.mrr = mrr; }
+        public double getTotalLifetimeRevenue() { return totalLifetimeRevenue; }
+        public void setTotalLifetimeRevenue(double totalLifetimeRevenue) { this.totalLifetimeRevenue = totalLifetimeRevenue; }
+        public double getAverageLTV() { return averageLTV; }
+        public void setAverageLTV(double averageLTV) { this.averageLTV = averageLTV; }
     }
 
     public static class MonthlyComparison {
@@ -507,28 +495,28 @@ public class AnalyticsController {
         private String[] labels;
         private Double[] thisMonthActual;
         private Double[] thisMonthProjected;
-        private Double[] lastMonth;
 
-        public ChartData(String[] labels, Double[] thisMonthActual, Double[] thisMonthProjected, Double[] lastMonth) {
+        public ChartData(String[] labels, Double[] thisMonthActual, Double[] thisMonthProjected) {
             this.labels = labels;
             this.thisMonthActual = thisMonthActual;
             this.thisMonthProjected = thisMonthProjected;
-            this.lastMonth = lastMonth;
         }
 
         public String[] getLabels() { return labels; }
         public Double[] getThisMonthActual() { return thisMonthActual; }
         public Double[] getThisMonthProjected() { return thisMonthProjected; }
-        public Double[] getLastMonth() { return lastMonth; }
     }
 
     public static class UserTypeData {
         private int count;
         private double revenue;
+        private double ltv;
 
         public int getCount() { return count; }
         public void setCount(int count) { this.count = count; }
         public double getRevenue() { return revenue; }
         public void setRevenue(double revenue) { this.revenue = revenue; }
+        public double getLtv() { return ltv; }
+        public void setLtv(double ltv) { this.ltv = ltv; }
     }
 }
