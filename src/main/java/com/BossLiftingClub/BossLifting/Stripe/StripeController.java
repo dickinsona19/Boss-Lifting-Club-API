@@ -841,17 +841,54 @@ public class StripeController {
             return "No active subscriptions found for customer: " + customerId;
         }
 
-        StringBuilder result = new StringBuilder("Canceled subscriptions at period end for customer " + customerId + ":\n");
+        StringBuilder result = new StringBuilder("Canceled subscriptions for customer " + customerId + ":\n");
 
-        // Cancel each active subscription
+        // Cancel subscriptions based on price ID
         for (Subscription sub : subscriptions.getData()) {
-            Map<String, Object> updateParams = new HashMap<>();
-            updateParams.put("cancel_at_period_end", true);
+            boolean hasTargetPrice = false;
+            for (com.stripe.model.SubscriptionItem item : sub.getItems().getData()) {
+                if ("price_1RF30SGHcVHSTvgIpegCzQ0m".equals(item.getPrice().getId())) {
+                    hasTargetPrice = true;
+                }
+            }
 
-            Subscription updatedSub = sub.update(updateParams);
+            Long cancelAt;
+            if (hasTargetPrice) {
+                // Cancel at the end of the current billing period (before upcoming renewal)
+                cancelAt = sub.getCurrentPeriodEnd();
+            } else {
+                // Cancel at the end of the upcoming billing period
+                Map<String, Object> invoiceParams = new HashMap<>();
+                invoiceParams.put("subscription", sub.getId());
+
+                Invoice upcoming = null;
+                try {
+                    upcoming = Invoice.upcoming(invoiceParams);
+                } catch (StripeException e) {
+                    // Handle exception appropriately
+                    continue;
+                }
+                cancelAt = upcoming.getLines().getData().get(0).getPeriod().getEnd();
+            }
+
+            Map<String, Object> updateParams = new HashMap<>();
+            updateParams.put("cancel_at", cancelAt);
+
+            Subscription updatedSub = null;
+            try {
+                updatedSub = sub.update(updateParams);
+            } catch (StripeException e) {
+                // Handle exception appropriately
+                continue;
+            }
+
             result.append("Subscription ID: ").append(updatedSub.getId())
-                    .append(" will cancel at: ").append(updatedSub.getCurrentPeriodEnd())
+                    .append(" will cancel at: ").append(updatedSub.getCancelAt())
                     .append("\n");
+        }
+
+        if (result.toString().equals("Canceled subscriptions for customer " + customerId + ":\n")) {
+            return "No subscriptions were updated for customer: " + customerId;
         }
 
         // Send email notification to the customer
@@ -866,24 +903,33 @@ public class StripeController {
 
         helper.setFrom("contact@cltliftingclub.com");
         helper.setTo(toEmail);
-        helper.setSubject("Membership Cancellation Confirmation");
+        helper.setSubject("Sorry to See You Go - Why’d You Leave?");
 
         // Build email body
         StringBuilder emailBody = new StringBuilder();
-        emailBody.append("<h3>Dear ").append(customerName).append(",</h3>")
-                .append("<p>We have received your request to cancel your membership(s). The following subscriptions have been scheduled to cancel at the end of their current billing period:</p>")
+        emailBody.append("<p>Hi ").append(customerName).append(",</p>")
+                .append("<p>Sorry to hear you’re leaving CLT Lifting Club. As per our cancellation policy, your membership(s) will be canceled at the end of the current or upcoming billing period, as listed below. You’ll continue to have access to your membership benefits until the cancellation date(s).</p>")
                 .append("<ul>");
 
         for (Subscription sub : subscriptions.getData()) {
-            emailBody.append("<li>Subscription ID: ").append(sub.getId())
-                    .append(" (Cancellation Date: ").append(new java.util.Date(sub.getCurrentPeriodEnd() * 1000))
-                    .append(")</li>");
+            boolean hasTargetPrice = false;
+            for (com.stripe.model.SubscriptionItem item : sub.getItems().getData()) {
+                if ("price_1RF30SGHcVHSTvgIpegCzQ0m".equals(item.getPrice().getId())) {
+                    hasTargetPrice = true;
+                    break;
+                }
+            }
+
+            if (!hasTargetPrice) {
+                emailBody.append("<li>Subscription ID: ").append(sub.getId())
+                        .append(" (Cancellation Date: ").append(new java.util.Date(sub.getCancelAt() * 1000))
+                        .append(")</li>");
+            }
         }
 
         emailBody.append("</ul>")
-                .append("<p>You will continue to have access to your membership benefits until the cancellation date(s) listed above.</p>")
-                .append("<p>If you have any questions or wish to reactivate your membership, please contact our support team.</p>")
-                .append("<p>Thank you,<br>CLT Lifting Club</p>");
+                .append("<p>Do you mind telling us why you’re stepping away? When you miss us, come back for a free day pass and feel free to bring a friend.</p>")
+                .append("<p>Best,<br>The CLT Lifting Club Team</p>");
 
         helper.setText(emailBody.toString(), true); // true indicates HTML content
         mailSender.send(message);
