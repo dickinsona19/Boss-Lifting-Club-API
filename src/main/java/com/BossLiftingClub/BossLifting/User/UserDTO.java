@@ -1,7 +1,9 @@
 package com.BossLiftingClub.BossLifting.User;
 
-
+import java.time.LocalDateTime;
 import java.util.Set;
+import com.BossLiftingClub.BossLifting.User.UserTitles.UserTitles;
+import com.BossLiftingClub.BossLifting.User.Membership.Membership;
 
 public class UserDTO {
 
@@ -14,6 +16,17 @@ public class UserDTO {
     private String userStripeMemberId;
     private String referralCode;
     private Set<ReferredUserDto> referredMembersDto;
+    private LocalDateTime createdAt;
+    private UserTitles userTitles;
+    private Boolean isOver18;
+    private String lockedInRate;
+    private String signatureData;
+    private LocalDateTime waiverSignedDate;
+    private String profilePictureUrl;
+    private Long parentId;
+    private Set<UserDTO> childrenDto;
+    private Long referredById;
+    private Membership membership;
 
     public UserDTO() {}
 
@@ -27,6 +40,17 @@ public class UserDTO {
         this.userStripeMemberId = user.getUserStripeMemberId();
         this.referralCode = user.getReferralCode();
         this.referredMembersDto = user.getReferredMembersDto();  // safe: this avoids the LOBs
+        this.createdAt = user.getCreatedAt();
+        this.userTitles = user.getUserTitles();
+        this.isOver18 = user.isOver18();
+        this.lockedInRate = user.isLockedInRate();
+        this.signatureData = user.getSignatureData();
+        this.waiverSignedDate = user.getWaiverSignedDate();
+        this.profilePictureUrl = user.getProfilePictureUrl();
+        this.parentId = user.getParent() != null ? user.getParent().getId() : null;
+        this.childrenDto = user.getChildrenDto();
+        this.referredById = user.getReferredBy() != null ? user.getReferredBy().getId() : null;
+        this.membership = user.getMembership();
     }
 
     public Long getId() {
@@ -99,5 +123,93 @@ public class UserDTO {
 
     public void setReferredMembersDto(Set<ReferredUserDto> referredMembersDto) {
         this.referredMembersDto = referredMembersDto;
+    }
+
+    public LocalDateTime getCreatedAt() {
+        return createdAt;
+    }
+
+    public void setCreatedAt(LocalDateTime createdAt) {
+        this.createdAt = createdAt;
+    }
+
+    public UserTitles getUserTitles() {
+        return userTitles;
+    }
+
+    public void setUserTitles(UserTitles userTitles) {
+        this.userTitles = userTitles;
+    }
+
+    public Boolean isOver18() {
+        return isOver18;
+    }
+
+    public void setIsOver18(Boolean isOver18) {
+        this.isOver18 = isOver18;
+    }
+
+    public String isLockedInRate() {
+        return lockedInRate;
+    }
+
+    public void setLockedInRate(String lockedInRate) {
+        this.lockedInRate = lockedInRate;
+    }
+
+    public String getSignatureData() {
+        return signatureData;
+    }
+
+    public void setSignatureData(String signatureData) {
+        this.signatureData = signatureData;
+    }
+
+    public LocalDateTime getWaiverSignedDate() {
+        return waiverSignedDate;
+    }
+
+    public void setWaiverSignedDate(LocalDateTime waiverSignedDate) {
+        this.waiverSignedDate = waiverSignedDate;
+    }
+
+    public String getProfilePictureUrl() {
+        return profilePictureUrl;
+    }
+
+    public void setProfilePictureUrl(String profilePictureUrl) {
+        this.profilePictureUrl = profilePictureUrl;
+    }
+
+    public Long getParentId() {
+        return parentId;
+    }
+
+    public void setParentId(Long parentId) {
+        this.parentId = parentId;
+    }
+
+    public Set<UserDTO> getChildrenDto() {
+        return childrenDto;
+    }
+
+    public void setChildrenDto(Set<UserDTO> childrenDto) {
+        this.childrenDto = childrenDto;
+    }
+
+    public Long getReferredById() {
+        return referredById;
+    }
+
+    public void setReferredById(Long referredById) {
+        this.referredById = referredById;
+    }
+
+    public Membership getMembership() {
+        return membership;
+    }
+
+    public void setMembership(Membership membership) {
+        this.membership = membership;
     }
 }
