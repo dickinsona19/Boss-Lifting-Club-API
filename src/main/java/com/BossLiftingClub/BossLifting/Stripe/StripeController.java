@@ -928,7 +928,7 @@ public class StripeController {
         }
 
         emailBody.append("</ul>")
-                .append("<p>Do you mind telling us why you’re stepping away? When you miss us, come back for a free day pass and feel free to bring a friend.</p>")
+                .append("<p>Do you mind telling us why you’re stepping away? Feel free to come back for a free day pass and feel free to bring a friend.</p>")
                 .append("<p>Best,<br>The CLT Lifting Club Team</p>");
 
         helper.setText(emailBody.toString(), true); // true indicates HTML content
