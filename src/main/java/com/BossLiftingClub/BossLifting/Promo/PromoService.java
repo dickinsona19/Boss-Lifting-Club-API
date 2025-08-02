@@ -16,4 +16,5 @@ public interface PromoService {
     void deleteById(Long id);
 
     void addUserToPromo(String codeToken, Long userId);
+    Optional<PromoDTO> incrementUrlVisitCountByCodeToken(String codeToken);
 }

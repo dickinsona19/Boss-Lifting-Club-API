@@ -31,6 +31,9 @@ public class Promo {
     @Column(name = "free_pass_count")
     private Integer freePassCount = 0;
 
+    @Column(name = "url_visit_count")
+    private Integer urlVisitCount = 0;
+
     // Getters and Setters
     public Long getId() {
         return id;
@@ -70,5 +73,13 @@ public class Promo {
 
     public void setFreePassCount(Integer freePassCount) {
         this.freePassCount = freePassCount;
+    }
+
+    public Integer getUrlVisitCount() {
+        return urlVisitCount;
+    }
+
+    public void setUrlVisitCount(Integer urlVisitCount) {
+        this.urlVisitCount = urlVisitCount;
     }
 }

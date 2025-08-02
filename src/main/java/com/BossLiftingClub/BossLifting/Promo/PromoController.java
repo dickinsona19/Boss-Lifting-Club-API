@@ -147,4 +147,11 @@ public class PromoController {
         mailSender.send(message);
     }
 
+    @PostMapping("/code/{codeToken}/increment-url-visit")
+    public ResponseEntity<PromoDTO> incrementUrlVisitCountByCodeToken(@PathVariable String codeToken) {
+        return promoService.incrementUrlVisitCountByCodeToken(codeToken)
+                .map(ResponseEntity::ok)
+                .orElseGet(() -> ResponseEntity.notFound().build());
+    }
+
 }

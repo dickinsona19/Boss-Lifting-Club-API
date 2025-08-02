@@ -10,15 +10,17 @@ public class PromoDTO {
     private String codeToken;
     private List<UserDTO> users; // Include full UserDTO objects instead of just IDs
     private Integer freePassCount;
+    private Integer urlVisitCount;
 
 
     // Constructor
-    public PromoDTO(Long id, String name, String codeToken, List<UserDTO> users, Integer freePassCount) {
+    public PromoDTO(Long id, String name, String codeToken, List<UserDTO> users, Integer freePassCount, Integer urlVisitCount) {
         this.id = id;
         this.name = name;
         this.codeToken = codeToken;
         this.users = users;
         this.freePassCount = freePassCount;
+        this.urlVisitCount = urlVisitCount;
     }
 
     // Getters and Setters
@@ -60,5 +62,13 @@ public class PromoDTO {
 
     public void setFreePassCount(Integer freePassCount) {
         this.freePassCount = freePassCount;
+    }
+
+    public Integer getUrlVisitCount() {
+        return urlVisitCount;
+    }
+
+    public void setUrlVisitCount(Integer urlVisitCount) {
+        this.urlVisitCount = urlVisitCount;
     }
 }
