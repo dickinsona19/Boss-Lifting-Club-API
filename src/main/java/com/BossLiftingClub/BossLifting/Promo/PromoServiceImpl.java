@@ -3,6 +3,7 @@ package com.BossLiftingClub.BossLifting.Promo;
 import com.BossLiftingClub.BossLifting.User.User;
 import com.BossLiftingClub.BossLifting.User.UserDTO;
 import com.BossLiftingClub.BossLifting.User.UserRepository;
+import jakarta.persistence.EntityNotFoundException;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
@@ -20,6 +21,19 @@ public class PromoServiceImpl implements PromoService {
     @Autowired
     private UserRepository userRepository;
 
+    private PromoDTO mapToDTO(Promo promo) {
+        return new PromoDTO(
+                promo.getId(),
+                promo.getName(),
+                promo.getCodeToken(),
+                promo.getUsers() != null ?
+                        promo.getUsers().stream().map(UserDTO::new).collect(Collectors.toList()) :
+                        List.of(),
+                promo.getFreePassCount(),
+                promo.getUrlVisitCount()
+        );
+    }
+
     @Override
     public List<PromoDTO> findAll() {
         return promoRepository.findAllWithUsers().stream()
@@ -30,22 +44,15 @@ public class PromoServiceImpl implements PromoService {
                         promo.getUsers() != null ?
                                 promo.getUsers().stream().map(UserDTO::new).toList() :
                                 List.of(),
-                        promo.getFreePassCount()
+                        promo.getFreePassCount(),
+                        promo.getUrlVisitCount()
                 ))
                 .toList();
     }
 
     @Override
     public Optional<PromoDTO> findById(Long id) {
-        return promoRepository.findByIdWithUsers(id).map(promo -> new PromoDTO(
-                promo.getId(),
-                promo.getName(),
-                promo.getCodeToken(),
-                promo.getUsers() != null ?
-                        promo.getUsers().stream().map(UserDTO::new).toList() :
-                        List.of(),
-                promo.getFreePassCount()
-        ));
+        return promoRepository.findByIdWithUsers(id).map(this::mapToDTO);
     }
 
     @Override
@@ -57,8 +64,18 @@ public class PromoServiceImpl implements PromoService {
                 promo.getUsers() != null ?
                         promo.getUsers().stream().map(UserDTO::new).toList() :
                         List.of(),
-                promo.getFreePassCount()
+                promo.getFreePassCount(),
+                promo.getUrlVisitCount()
         ));
+    }
+
+    @Override
+    public Optional<PromoDTO> incrementUrlVisitCountByCodeToken(String codeToken) {
+        return promoRepository.findByCodeTokenWithUsers(codeToken).map(promo -> {
+            promo.setUrlVisitCount(promo.getUrlVisitCount() + 1);
+            Promo updatedPromo = promoRepository.save(promo);
+            return mapToDTO(updatedPromo);
+        });
     }
 
     @Override
