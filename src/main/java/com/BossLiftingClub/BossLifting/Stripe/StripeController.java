@@ -964,38 +964,52 @@ public class StripeController {
                 MimeMessageHelper helper = new MimeMessageHelper(mimeMessage, true, "UTF-8");
                 helper.setTo(email);
                 helper.setFrom(NEW_CONTACT_EMAIL);
-                helper.setSubject("Update: New Contact Email for CLT Lifting Club");
+                helper.setSubject("You're Invited: CLT x KKB Open Gym Social Event – Aug 16th");
                 String htmlContent = """
-                    <!DOCTYPE html>
-                    <html>
-                    <head>
-                        <style>
-                            body { font-family: Arial, sans-serif; color: #333; }
-                            .container { max-width: 600px; margin: 0 auto; padding: 20px; }
-                            .header { background-color: #f8f8f8; padding: 10px; text-align: center; }
-                            .content { padding: 20px; }
-                            .footer { font-size: 12px; color: #777; text-align: center; }
-                        </style>
-                    </head>
-                    <body>
-                        <div class="container">
-                            <div class="header">
-                                <h2>CLT Lifting Club</h2>
-                            </div>
-                            <div class="content">
-                                <p>Dear Member,</p>
-                                <p>We’ve updated our contact information to better serve you. Please use our new email address for all future inquiries:</p>
-                                <p><strong>%s</strong></p>
-                                <p>This ensures we can respond to your questions or concerns promptly. Thank you for being a valued member of CLT Lifting Club!</p>
-                                <p>Best regards,<br>The CLT Lifting Club Team</p>
-                            </div>
-                            <div class="footer">
-                                <p>CLT Lifting Club | %s</p>
-                            </div>
+                <!DOCTYPE html>
+                <html>
+                <head>
+                    <style>
+                        body { font-family: Arial, sans-serif; color: #333; }
+                        .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+                        .header { background-color: #f8f8f8; padding: 10px; text-align: center; }
+                        .content { padding: 20px; }
+                        .footer { font-size: 12px; color: #777; text-align: center; }
+                    </style>
+                </head>
+                <body>
+                    <div class="container">
+                        <div class="header">
+                            <h2>CLT Lifting Club</h2>
                         </div>
-                    </body>
-                    </html>
-                    """.formatted(NEW_CONTACT_EMAIL, NEW_CONTACT_EMAIL);
+                        <div class="content">
+                            <p>Hey CLT Family,</p>
+                            <p>CLT Lifting Club is teaming up with Kingdom KickBacks for an epic Open Gym Social day focused on movement, connection, and building a close community. We'd love to see you there!</p>
+                            <p>Why You Need to Be Here:</p>
+                            <ul>
+                                <li>Smash your workout during Open Gym</li>
+                                <li>Fuel up with fresh coffee + local food truck eats</li>
+                                <li>DJ spinning high-energy tracks to keep the vibe right</li>
+                                <li>Cold plunge & sauna recovery zone</li>
+                                <li>Meet other members and build real community</li>
+                                <li>Bring your friends — FREE</li>
+                            </ul>
+                            <p>Details:</p>
+                            <p>When: Saturday, August 16th | 10 AM – 1 PM</p>
+                            <p>Where: CLT Lifting Club, 3100 South Boulevard, Charlotte, NC 28203</p>
+                            <p>One Click to Join the Tribe:</p>
+                            <p>Let us know you're coming! <a href="https://www.evite.com/signup-sheet/6025706806444032/?utm_campaign=send_sharable_link&utm_source=evitelink&utm_medium=sharable_invite">RSVP NOW</a></p>
+                            <p>Bonus: On August 16th post a workout or event hype pic using #CLTLiftingClub and tag @CLTLiftingClub for a chance to win a free CLT tee</p>
+                            <p>Let’s make August 16th a day of strength, connection, and unforgettable memories!</p>
+                            <p>Stay elite,<br>The CLT Lifting Club Team</p>
+                        </div>
+                        <div class="footer">
+                            <p>CLT Lifting Club | %s</p>
+                        </div>
+                    </div>
+                </body>
+                </html>
+                """.formatted(NEW_CONTACT_EMAIL);
                 helper.setText(htmlContent, true);
                 mailSender.send(mimeMessage);
 
